@@ -11,7 +11,12 @@
 
 <PageTitle>Gastos</PageTitle>
 
-<MudText Typo="Typo.h4" Class="mb-2"><h1 style="all:inherit;margin:0">Gastos</h1></MudText>
+<div class="d-flex align-center flex-wrap mb-2" style="gap:.75rem">
+    <MudText Typo="Typo.h4"><h1 style="all:inherit;margin:0">Gastos</h1></MudText>
+    <MudSpacer />
+    <MudText Typo="Typo.body2" Class="mud-text-secondary">@_gastos.Count gasto(s)@TotalImporte</MudText>
+    <MudButton Variant="Variant.Filled" Size="Size.Small" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="CargarAsync" Disabled="_loading">Refrescar</MudButton>
+</div>
 
 <GtGrid T="GastoVista" @ref="_grid" Items="_gastos" Columnas="_cols" Loading="_loading" NombreExport="Gastos"
         TextoVacio="@(_consultado ? "No hay gastos para el periodo seleccionado." : "Selecciona el periodo y pulsa Refrescar.")">
@@ -19,10 +24,6 @@
         <MudDateRangePicker @bind-DateRange="_rango" Label="Fecha del gasto" Margin="Margin.Dense" Variant="Variant.Outlined"
                             PickerVariant="PickerVariant.Dialog" DateFormat="dd/MM/yyyy" Clearable="true" Class="mt-0" Style="width:320px;min-width:320px" />
     </ToolbarIzquierda>
-    <ToolbarCentro>
-        <MudText Typo="Typo.body2" Class="mud-text-secondary mr-2">@_gastos.Count gasto(s)@TotalImporte</MudText>
-        <MudButton Variant="Variant.Filled" Size="Size.Small" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="CargarAsync" Disabled="_loading">Refrescar</MudButton>
-    </ToolbarCentro>
     <ToolbarDerecha>
         @if (Sesion.EsAdministrador)
         {
