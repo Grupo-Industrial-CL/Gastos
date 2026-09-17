@@ -18,7 +18,7 @@
             <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@(() => _drawerOpen = !_drawerOpen)" />
         }
         <MudIcon Icon="@Icons.Material.Filled.Receipt" Class="ml-1 mr-2" />
-        <MudText Typo="Typo.h6">Gastos de viaje</MudText>
+        <MudText Typo="Typo.h6">Gastos</MudText>
         <MudSpacer />
         <MudTooltip Text="@(_isDarkMode ? "Modo claro" : "Modo oscuro")">
             <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
@@ -29,9 +29,9 @@
                 <MudText Typo="Typo.body2" Class="mr-2 d-none d-sm-flex">
                     @(string.IsNullOrWhiteSpace(Sesion.Nombre) ? context.User.Identity?.Name : Sesion.Nombre)
                 </MudText>
-                @if (Sesion.TieneAcceso)
+                @if (Sesion.EsAdministrador)
                 {
-                    <MudChip T="string" Size="Size.Small" Color="@(Sesion.EsAdministrador ? Color.Secondary : Color.Primary)" Class="mr-2 d-none d-sm-flex">@Sesion.Rol</MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Class="mr-2 d-none d-sm-flex">@Sesion.Rol</MudChip>
                 }
                 <MudMenu Icon="@Icons.Material.Filled.AccountCircle" Color="Color.Inherit">
                     <MudMenuItem Disabled="true">@context.User.Identity?.Name</MudMenuItem>
@@ -92,7 +92,8 @@
 </MudLayout>
 
 @code {
-    private bool _drawerOpen = true;
+    // El menú lateral arranca plegado y se pliega al navegar, para ganar espacio para el grid. Se abre con el botón de la barra.
+    private bool _drawerOpen;
     private bool _isDarkMode;
     private bool _cargado;
     private MudThemeProvider _themeProvider = default!;
@@ -136,7 +137,11 @@
     }
 
     // Control por RUTA además del menú: un Consultor no puede entrar en /config/* escribiendo la URL.
-    private void OnLocationChanged(object? sender, LocationChangedEventArgs e) => GuardarAcceso();
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        GuardarAcceso();
+        if (_drawerOpen) { _drawerOpen = false; StateHasChanged(); }
+    }
 
     private void GuardarAcceso()
     {

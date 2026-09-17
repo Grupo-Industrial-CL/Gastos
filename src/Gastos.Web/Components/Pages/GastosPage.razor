@@ -1,7 +1,6 @@
 @page "/gastos"
 @attribute [Authorize]
 @inject IGastoService GastoService
-@inject ICatalogoService Catalogos
 @inject SesionUsuario Sesion
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
@@ -12,27 +11,18 @@
 
 <PageTitle>Gastos</PageTitle>
 
-<div class="d-flex align-center flex-wrap mb-3" style="gap:.75rem">
-    <MudText Typo="Typo.h4" Class="mr-2"><h1 style="all:inherit;margin:0">Gastos</h1></MudText>
-    <MudSpacer />
-    <MudDateRangePicker @bind-DateRange="_rango" Label="Fecha del gasto" Margin="Margin.Dense" Variant="Variant.Outlined"
-                        PickerVariant="PickerVariant.Dialog" DateFormat="dd/MM/yyyy" Clearable="true" Style="max-width:260px" />
-    <MudSelect T="int" MultiSelection="true" @bind-SelectedValues="_sociedadesSel" Label="Sociedades" Margin="Margin.Dense" Variant="Variant.Outlined"
-               Dense="true" Style="min-width:260px;max-width:420px" MultiSelectionTextFunc="@TextoSociedades" SelectAll="true" SelectAllText="Todas">
-        @foreach (var s in _sociedades)
-        {
-            <MudSelectItem T="int" Value="@s.CodPais">@s.Nombre</MudSelectItem>
-        }
-    </MudSelect>
-    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="CargarAsync" Disabled="_loading">Consultar</MudButton>
-</div>
+<MudText Typo="Typo.h4" Class="mb-2"><h1 style="all:inherit;margin:0">Gastos</h1></MudText>
 
 <GtGrid T="GastoVista" @ref="_grid" Items="_gastos" Columnas="_cols" Loading="_loading" NombreExport="Gastos"
-        PlaceholderBusqueda="Buscar (empleado, concepto, factura...)"
-        TextoVacio="@(_consultado ? "No hay gastos para el periodo y las sociedades seleccionadas." : "Selecciona el periodo y pulsa Consultar.")">
+        TextoVacio="@(_consultado ? "No hay gastos para el periodo seleccionado." : "Selecciona el periodo y pulsa Refrescar.")">
     <ToolbarIzquierda>
-        <MudText Typo="Typo.body2" Class="mud-text-secondary ml-2">@_gastos.Count gasto(s) · @TotalImporte</MudText>
+        <MudDateRangePicker @bind-DateRange="_rango" Label="Fecha del gasto" Margin="Margin.Dense" Variant="Variant.Outlined"
+                            PickerVariant="PickerVariant.Dialog" DateFormat="dd/MM/yyyy" Clearable="true" Class="mt-0" Style="width:320px;min-width:320px" />
     </ToolbarIzquierda>
+    <ToolbarCentro>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mr-2">@_gastos.Count gasto(s)@TotalImporte</MudText>
+        <MudButton Variant="Variant.Filled" Size="Size.Small" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="CargarAsync" Disabled="_loading">Refrescar</MudButton>
+    </ToolbarCentro>
     <ToolbarDerecha>
         @if (Sesion.EsAdministrador)
         {
@@ -44,15 +34,12 @@
 @code {
     private GtGrid<GastoVista>? _grid;
     private List<GastoVista> _gastos = new();
-    private List<Sociedad> _sociedades = new();
-    private IEnumerable<int> _sociedadesSel = Array.Empty<int>();
     private DateRange _rango = new(new DateTime(DateTime.Today.Year, 1, 1), DateTime.Today);
     private bool _loading;
     private bool _consultado;
     private List<GtColumna<GastoVista>> _cols = new();
 
-    private string TotalImporte => _gastos.Count == 0 ? string.Empty : $"total {_gastos.Sum(g => g.Importe):N2} €";
-    private string TextoSociedades(List<string> sel) => sel.Count == _sociedades.Count ? "Todas" : $"{sel.Count} seleccionada(s)";
+    private string TotalImporte => _gastos.Count == 0 ? string.Empty : $" · total {_gastos.Sum(g => g.Importe):N2} €";
 
     protected override async Task OnInitializedAsync()
     {
@@ -76,14 +63,6 @@
         };
 
         await Sesion.EnsureLoadedAsync();
-        try
-        {
-            var todas = await Catalogos.DameSociedadesAsync();
-            // El Consultor solo puede elegir entre sus sociedades permitidas.
-            _sociedades = Sesion.SociedadesVisibles is null ? todas.ToList() : todas.Where(s => Sesion.SociedadesVisibles.Contains(s.CodPais)).ToList();
-            _sociedadesSel = _sociedades.Select(s => s.CodPais).ToList();
-        }
-        catch (Exception ex) { Snackbar.Add($"Error al cargar las sociedades: {ex.Message}", Severity.Error); }
         await CargarAsync();
     }
 
@@ -100,10 +79,8 @@
         _loading = true;
         try
         {
-            // Barrera de seguridad: la intersección entre lo seleccionado y lo permitido. Un Consultor nunca consulta fuera de sus sociedades.
-            var permitidas = _sociedades.Select(s => s.CodPais).ToHashSet();
-            var sel = _sociedadesSel.Where(permitidas.Contains).ToList();
-            _gastos = (await GastoService.DameGastosAsync(sel, _rango?.Start, _rango?.End)).ToList();
+            // Barrera de seguridad: el Administrador consulta sin filtro de sociedad (null); el Consultor SIEMPRE con sus permitidas.
+            _gastos = (await GastoService.DameGastosAsync(Sesion.SociedadesVisibles, _rango?.Start, _rango?.End)).ToList();
             _consultado = true;
         }
         catch (Exception ex) { Snackbar.Add($"Error al consultar los gastos: {ex.Message}", Severity.Error); }

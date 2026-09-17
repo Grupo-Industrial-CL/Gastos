@@ -12,6 +12,7 @@
                   AdornmentIcon="@Icons.Material.Filled.Search" Class="mt-0" Style="max-width:380px" />
     @ToolbarIzquierda
     <MudSpacer />
+    @ToolbarCentro
     <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.FilterAltOff" OnClick="LimpiarFiltros">Limpiar filtros</MudButton>
     @ToolbarDerecha
     <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Success" StartIcon="@Icons.Material.Filled.FileDownload"
@@ -64,11 +65,13 @@
     [Parameter] public List<GtColumna<T>> Columnas { get; set; } = new();
     [Parameter] public bool Loading { get; set; }
     [Parameter] public int RowsPerPage { get; set; } = 50;
-    [Parameter] public string PlaceholderBusqueda { get; set; } = "Buscar en todas las columnas...";
+    [Parameter] public string PlaceholderBusqueda { get; set; } = "Buscar...";
     [Parameter] public string TextoVacio { get; set; } = "No hay registros.";
     [Parameter] public string TextoSinResultados { get; set; } = "No hay resultados para los filtros aplicados.";
     [Parameter] public RenderFragment<T>? Acciones { get; set; }
     [Parameter] public RenderFragment? ToolbarIzquierda { get; set; }
+    /// <summary>Controles a la derecha del espaciador, antes de "Limpiar filtros" (p. ej. recuento y Refrescar).</summary>
+    [Parameter] public RenderFragment? ToolbarCentro { get; set; }
     [Parameter] public RenderFragment? ToolbarDerecha { get; set; }
     [Parameter] public string Alto { get; set; } = "calc(100vh - 330px)";
     [Parameter] public string NombreExport { get; set; } = "Datos";
