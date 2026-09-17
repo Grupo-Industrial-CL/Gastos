@@ -1,7 +1,9 @@
 /* =====================================================================================================
-   Portal de Gastos de viaje — creación del esquema GT_* en SQL Server (MasterPlan_DES / MasterPlan)
+   Portal de Gastos de viaje — 01_esquema.sql: SOLO ESTRUCTURA (tablas, claves, índices). Sin datos.
    -----------------------------------------------------------------------------------------------------
-   - Pensado para DBeaver (sin GO). IDEMPOTENTE: se puede relanzar; solo crea lo que falta y actualiza semillas.
+   - Pensado para DBeaver (sin GO). IDEMPOTENTE: se puede relanzar; solo crea lo que falta.
+   - Los datos (sociedades, tipos de gasto, primer administrador) van en 02_datos.sql y el histórico en
+     03_migracion_informix.sql.
    - Requiere que exista dbo.MP_Usuarios (directorio de Azure AD compartido con MasterPlan).
    - Equivalencia con Informix (aplicación VB6 "Gastos"):
        paises            -> GT_Sociedades          gastos_empresas -> GT_GastosSociedades
@@ -21,74 +23,6 @@ CREATE TABLE dbo.GT_Sociedades
     NombreIngles  NVARCHAR(100)  NULL,
     Activo        BIT            NOT NULL CONSTRAINT DF_GT_Sociedades_Activo DEFAULT (1)
 );
-
--- Semilla: la lista de sociedades ("países") de Constantes.bas del VB6. No pisa el nombre si ya existe la fila.
-MERGE dbo.GT_Sociedades AS t
-USING (VALUES
-    (34, N'España', N'Spain'),
-    (35, N'España2', N'Spain2'),
-    (51, N'Portugal', N'Portugal'),
-    (39, N'Italia', N'Italy'),
-    (55, N'Brasil', N'Brazil'),
-    (1, N'U.S.A.', N'U.S.A.'),
-    (9, N'P.Rico', N'P.Rico'),
-    (52, N'Mexico', N'Mexico'),
-    (56, N'Chile', N'Chile'),
-    (48, N'Polonia', N'Poland'),
-    (44, N'Reino Unido', N'United Kingdom'),
-    (85, N'Croacia', N'Croatia'),
-    (43, N'Austria', N'Austria'),
-    (49, N'Alemania', N'Germany'),
-    (7, N'Panama', N'Panama'),
-    (6, N'Costa Rica', N'Costa Rica'),
-    (12, N'Marruecos', N'Marruecos'),
-    (42, N'Republica Checa', N'Republica Checa'),
-    (58, N'Venezuela', N'Venezuela'),
-    (16, N'Tunez', N'Tunez'),
-    (54, N'Argentina', N'Argentina'),
-    (57, N'Colombia', N'Colombia'),
-    (24, N'Angola', N'Angola'),
-    (13, N'Argelia', N'Argelia'),
-    (23, N'Nigeria', N'Nigeria'),
-    (80, N'Hong Kong', N'Hong Kong'),
-    (40, N'Rumania', N'Rumania'),
-    (90, N'Turquia', N'Turkey'),
-    (8, N'Republica Dominicana', N'Republica Dominicana'),
-    (59, N'Ecuador', N'Ecuador'),
-    (18, N'Libia', N'Libia'),
-    (50, N'Peru', N'Peru'),
-    (2, N'Guatemala', N'Guatemala'),
-    (25, N'Costa de Marfil', N'Costa de Marfil'),
-    (10, N'Perseida', N'Perseida'),
-    (86, N'Gas Extremadura', N'Gas Extremadura'),
-    (87, N'Ondupack', N'Ondupack'),
-    (88, N'Alter Enersun', N'Alter Enersun'),
-    (89, N'Plastiverd', N'Plastiverd'),
-    (91, N'Iqoxe', N'Iqoxe'),
-    (92, N'GES', N'GES'),
-    (93, N'Lilo Technology', N'Lilo Technology'),
-    (83, N'Ondupet', N'Ondupet'),
-    (81, N'Murcia Cartón', N'Murcia Cartón'),
-    (82, N'Matías Gomá', N'Matías Gomá'),
-    (78, N'AG Siderúrgica Balboa', N'AG Siderúrgica Balboa'),
-    (77, N'Grupo Gallardo Balboa', N'Grupo Gallardo Balboa'),
-    (76, N'Alfonso Gallardo', N'Alfonso Gallardo'),
-    (75, N'Corrugados Lasao', N'Corrugados Lasao'),
-    (74, N'Marceliano Martín', N'Marceliano Martín'),
-    (73, N'Ferromallas', N'Ferromallas'),
-    (72, N'Corrugados Getafe', N'Corrugados Getafe'),
-    (71, N'Iqlit', N'Iqlit'),
-    (70, N'Galvacolor', N'Galvacolor'),
-    (69, N'Camal Ecosystems', N'Camal Ecosystems'),
-    (68, N'Papeleras Arlanzón', N'Papeleras Arlanzón'),
-    (67, N'Fundación RL', N'Fundación RL'),
-    (66, N'Gasiluz', N'Gasiluz'),
-    (65, N'Cristian LAY DSS', N'Cristian LAY DSS'),
-    (64, N'Industrias CL', N'Industrias CL'),
-    (63, N'Solar Steel', N'Solar Steel'),
-    (62, N'Cartonajes Extremadura', N'Cartonajes Extremadura')
-) AS s (CodPais, Nombre, NombreIngles) ON t.CodPais = s.CodPais
-WHEN NOT MATCHED THEN INSERT (CodPais, Nombre, NombreIngles, Activo) VALUES (s.CodPais, s.Nombre, s.NombreIngles, 1);
 
 -- ───────────────────────────── Empresas de gasto ─────────────────────────────
 IF OBJECT_ID('dbo.GT_GastosSociedades') IS NULL
@@ -143,13 +77,6 @@ CREATE TABLE dbo.GT_TiposGasto
     Orden        INT           NOT NULL CONSTRAINT DF_GT_TiposGasto_Orden DEFAULT (0),
     CONSTRAINT PK_GT_TiposGasto PRIMARY KEY (Tipo, Codigo)
 );
--- Semilla mínima: los códigos que el VB6 usa de forma fija en la carga de tarjetas. El resto ("Billetes", "Hoteles",
--- "Otros gastos", etc.) se completa con la migración desde Informix (db/02_migracion_informix.sql).
-MERGE dbo.GT_TiposGasto AS t
-USING (VALUES ('I', '1', N'Gasolina', 1), ('I', '9', N'Peaje', 9), ('I', '10', N'Otros gastos', 10), ('I', '11', N'Parking', 11)) AS s (Tipo, Codigo, NombreGasto, Orden)
-   ON t.Tipo = s.Tipo AND t.Codigo = s.Codigo
-WHEN NOT MATCHED THEN INSERT (Tipo, Codigo, NombreGasto, Orden) VALUES (s.Tipo, s.Codigo, s.NombreGasto, s.Orden);
-
 -- ───────────────────────────── Auditoría de cargas ─────────────────────────────
 IF OBJECT_ID('dbo.GT_Cargas') IS NULL
 CREATE TABLE dbo.GT_Cargas
@@ -295,8 +222,3 @@ CREATE TABLE dbo.GT_UsuariosSociedades
     CodPais  INT           NOT NULL CONSTRAINT FK_GT_UsuariosSociedades_Sociedad REFERENCES dbo.GT_Sociedades (CodPais),
     CONSTRAINT PK_GT_UsuariosSociedades PRIMARY KEY (Email, CodPais)
 );
-
-/* Primer administrador: sin él nadie puede entrar al portal. Sustituye el correo (usId de MP_Usuarios) y ejecuta:
-MERGE dbo.GT_UsuariosRoles AS t USING (SELECT N'itsasor@gicl.es' AS Email) AS s ON t.Email = s.Email
-WHEN NOT MATCHED THEN INSERT (Email, Rol, UsuarioAlta) VALUES (s.Email, 'Administrador', 'script inicial');
-*/

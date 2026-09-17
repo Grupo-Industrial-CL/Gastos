@@ -17,7 +17,8 @@
    Los nombres de columna de Informix son los que usa el código VB6; verificar contra el esquema real.
    ===================================================================================================== */
 
--- 1) Sociedades (paises). La semilla del script 01 ya trae las del VB6; aquí se completan las que falten.
+-- 1) Sociedades (paises). 02_datos.sql siembra las del VB6 (pendientes de validar); aquí se completan las que falten.
+--    Si la lista de Informix difiere de la semilla, corregir primero 02_datos.sql y volver a lanzarlo.
 INSERT INTO dbo.GT_Sociedades (CodPais, Nombre, NombreIngles, Activo)
 SELECT q.codpais, RTRIM(q.nombre), NULL, 1
 FROM OPENQUERY(GALILEO, 'SELECT codpais, nombre FROM paises') q

@@ -18,7 +18,7 @@
    o variable de entorno `AzureAd__ClientSecret`.
 2. **Cadena de conexión** con contraseña: `ConnectionStrings:Gastos` en user-secrets / `ConnectionStrings__Gastos`.
    Recomendado rotar la contraseña de `bd_masterplan_o`, que ha circulado por chat.
-3. **Crear las tablas** con `db/01_creacion_GT.sql` y dar de alta al **primer Administrador** (bloque final del script).
+3. **Crear las tablas** con `db/01_esquema.sql y db/02_datos.sql` y dar de alta al **primer Administrador** (bloque final del script).
 
 ## 🟠 Necesarios para las cargas
 
@@ -26,7 +26,7 @@
    (`ProveedorApiBase`) hace un GET con Bearer/API key y espera un array JSON de movimientos; adaptar
    `TraducirAsync` en `RepsolApiClient`/`MoeveApiClient` al contrato real. Mientras tanto, las opciones aparecen
    deshabilitadas en "Cargar datos" con el motivo.
-5. **Migración del histórico desde Informix** (`db/02_migracion_informix.sql`): validar nombres/tipos de columna reales
+5. **Migración del histórico desde Informix** (`db/03_migracion_informix.sql`): validar nombres/tipos de columna reales
    cuando se tenga acceso, decidir servidor vinculado u exportación a CSV, y ejecutar en el orden indicado. Sin los
    `GT_TiposGasto` de LayTours ("Billetes", "Hoteles", "Otros gastos" por `Tipo`) la carga LayTours falla con
    "No se ha encontrado el tipo de gasto".

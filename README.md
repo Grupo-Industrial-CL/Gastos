@@ -37,7 +37,7 @@ legacy/vb6/          Código fuente original en Visual Basic 6 (solo referencia)
 
 ## Puesta en marcha (desarrollo)
 
-1. Crear las tablas: ejecutar `db/01_creacion_GT.sql` en `MasterPlan_DES` y dar de alta al primer Administrador
+1. Crear las tablas: ejecutar `db/01_esquema.sql y db/02_datos.sql` en `MasterPlan_DES` y dar de alta al primer Administrador
    (bloque comentado al final del script).
 2. Configurar la cadena de conexión (no se commitea):
    ```bash

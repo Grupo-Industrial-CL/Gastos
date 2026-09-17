@@ -35,7 +35,7 @@ public static class AutenticacionSimulada
                     FROM dbo.GT_UsuariosRoles r LEFT JOIN dbo.MP_Usuarios u ON u.usId = r.Email
                     ORDER BY r.Rol, r.Email");
                 conRol = filas.Select(f => (f.Email, f.Rol, f.Nombre)).ToList();
-                if (conRol.Count == 0) aviso = "No hay ningún usuario con rol en GT_UsuariosRoles: ejecuta el bloque del primer Administrador de db/01_creacion_GT.sql.";
+                if (conRol.Count == 0) aviso = "No hay ningún usuario con rol en GT_UsuariosRoles: ejecuta el bloque C (primer Administrador) de db/02_datos.sql.";
             }
             catch (Exception ex) { aviso = "No se ha podido consultar la base de datos: " + ex.Message; }
 
