@@ -1,0 +1,80 @@
+@inject IMantenimientoService Mantenimiento
+@inject ICatalogoService Catalogos
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudSelect T="int" Value="_u.CodPais" ValueChanged="OnSociedadChanged" Label="Sociedad" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Disabled="@(!EsAlta)" Class="mb-2">
+                @foreach (var s in _sociedades) { <MudSelectItem T="int" Value="@s.CodPais">@s.Nombre</MudSelectItem> }
+            </MudSelect>
+            <MudSelect T="int" @bind-Value="_u.Departamento" Label="Departamento" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Disabled="@(!EsAlta)" Class="mb-2">
+                @foreach (var d in _departamentos.Where(d => d.CodPais == _u.CodPais)) { <MudSelectItem T="int" Value="@d.Codigo">@d.Descripcion (@d.Codigo)</MudSelectItem> }
+            </MudSelect>
+            <MudNumericField T="long" @bind-Value="_u.Codigo" Label="Código de empleado" Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!EsAlta)" Class="mb-2" />
+            <MudTextField T="string" @bind-Value="_u.Nombre" Label="Nombre" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" RequiredError="Obligatorio" MaxLength="100" Class="mb-2" />
+            <MudGrid Spacing="2">
+                <MudItem xs="6"><MudTextField T="string" @bind-Value="_u.DNI" Label="DNI" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="20" /></MudItem>
+                <MudItem xs="6"><MudTextField T="string" @bind-Value="_u.Jerarquia" Label="Jerarquía" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="10" /></MudItem>
+                <MudItem xs="6"><MudTextField T="string" @bind-Value="_u.IdEpsilon" Label="Id Epsilon (LayTours)" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="20" /></MudItem>
+                <MudItem xs="6"><MudTextField T="string" @bind-Value="_u.Usuario" Label="Usuario" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="50" /></MudItem>
+                <MudItem xs="12"><MudDatePicker @bind-Date="_u.FechaBaja" Label="Fecha de baja" Variant="Variant.Outlined" Margin="Margin.Dense" DateFormat="dd/MM/yyyy" Clearable="true" HelperText="Vacía = empleado activo" /></MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => Dialog.Cancel())">Cancelar</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="GuardarAsync" Disabled="_guardando">Guardar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private MudDialogInstance Dialog { get; set; } = default!;
+    [Parameter] public EmpleadoVista? Original { get; set; }
+
+    private MudForm _form = default!;
+    private UsuarioPersonal _u = new();
+    private List<Sociedad> _sociedades = new();
+    private List<Departamento> _departamentos = new();
+    private bool _guardando;
+    private bool EsAlta => Original is null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Original is not null)
+            _u = new UsuarioPersonal
+            {
+                CodPais = Original.CodPais, Departamento = Original.Departamento, Codigo = Original.Codigo, Nombre = Original.Nombre, DNI = Original.DNI,
+                Jerarquia = Original.Jerarquia, IdEpsilon = Original.IdEpsilon, Usuario = Original.Usuario, CuentaBancaria = Original.CuentaBancaria,
+                FechaBaja = Original.FechaBaja, BloqueadoPor = Original.BloqueadoPor
+            };
+        try
+        {
+            _sociedades = (await Catalogos.DameSociedadesAsync(soloActivas: false)).ToList();
+            _departamentos = (await Catalogos.DameDepartamentosAsync()).ToList();
+        }
+        catch (Exception ex) { Snackbar.Add($"Error al cargar catálogos: {ex.Message}", Severity.Error); }
+        if (EsAlta && _u.CodPais == 0 && _sociedades.Count > 0) OnSociedadChanged(_sociedades[0].CodPais);
+    }
+
+    private void OnSociedadChanged(int codPais)
+    {
+        _u.CodPais = codPais;
+        _u.Departamento = _departamentos.FirstOrDefault(d => d.CodPais == codPais)?.Codigo ?? 0;
+    }
+
+    private async Task GuardarAsync()
+    {
+        await _form.Validate();
+        if (!_form.IsValid) return;
+        _guardando = true;
+        try
+        {
+            await Mantenimiento.GuardarEmpleadoAsync(_u, EsAlta);
+            Snackbar.Add("Empleado guardado.", Severity.Success);
+            Dialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _guardando = false; }
+    }
+}

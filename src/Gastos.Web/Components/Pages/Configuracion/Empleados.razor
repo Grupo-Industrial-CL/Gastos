@@ -1,0 +1,79 @@
+@page "/config/empleados"
+@attribute [Authorize]
+@inject IMantenimientoService Mantenimiento
+@inject SesionUsuario Sesion
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>Empleados</PageTitle>
+
+<div class="d-flex align-center flex-wrap mb-2" style="gap:.75rem">
+    <MudText Typo="Typo.h4"><h1 style="all:inherit;margin:0">Empleados</h1></MudText>
+    <MudSpacer />
+    <MudButton Variant="Variant.Filled" Size="Size.Small" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PersonAdd" OnClick="@(() => EditarAsync(null))">Nuevo empleado</MudButton>
+</div>
+<MudText Typo="Typo.body2" Class="mb-3 mud-text-secondary">
+    Empleados que generan gastos (tabla GT_UsuariosPersonal). El <b>Id Epsilon</b> es la clave con la que el fichero de LayTours identifica al viajero.
+</MudText>
+
+@if (!Sesion.EsAdministrador)
+{
+    <MudAlert Severity="Severity.Warning">Solo los Administradores pueden configurar empleados.</MudAlert>
+}
+else
+{
+    <GtGrid T="EmpleadoVista" Items="Visibles" Columnas="_cols" Loading="_loading" NombreExport="Empleados" RowsPerPage="50" OnFilaClick="@(e => EditarAsync(e))"
+            TextoVacio="No hay empleados. Se cargan con la migración desde Informix o dándolos de alta aquí.">
+        <ToolbarIzquierda>
+            <MudSwitch T="bool" @bind-Value="_mostrarBajas" Color="Color.Default" Label="Mostrar bajas" Class="ml-2" />
+        </ToolbarIzquierda>
+        <Acciones Context="e">
+            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary" OnClick="@(() => EditarAsync(e))" />
+        </Acciones>
+    </GtGrid>
+}
+
+@code {
+    private List<EmpleadoVista> _items = new();
+    private bool _loading = true;
+    private bool _mostrarBajas;
+    private IEnumerable<EmpleadoVista> Visibles => _items.Where(e => _mostrarBajas || e.FechaBaja is null || e.FechaBaja > DateTime.Today);
+
+    private readonly List<GtColumna<EmpleadoVista>> _cols = new()
+    {
+        new() { Titulo = "Sociedad", Valor = x => x.SociedadNombre, Ancho = "180px" },
+        new() { Titulo = "Departamento", Valor = x => x.DepartamentoNombre, Ancho = "170px" },
+        new() { Titulo = "Código", Valor = x => x.Codigo.ToString(), Orden = x => x.Codigo, Numero = x => x.Codigo, Ancho = "90px", SinEmbudo = true, Derecha = true },
+        new() { Titulo = "Nombre", Valor = x => x.Nombre, Ancho = "220px", SinEmbudo = true },
+        new() { Titulo = "DNI", Valor = x => x.DNI ?? string.Empty, Ancho = "110px", SinEmbudo = true },
+        new() { Titulo = "Jerarquía", Valor = x => x.Jerarquia, Ancho = "100px" },
+        new() { Titulo = "Id Epsilon", Valor = x => x.IdEpsilon ?? string.Empty, Ancho = "110px", SinEmbudo = true },
+        new() { Titulo = "Usuario", Valor = x => x.Usuario ?? string.Empty, Ancho = "120px", SinEmbudo = true },
+        new() { Titulo = "Fecha baja", Valor = x => x.FechaBaja?.ToString("dd/MM/yyyy") ?? string.Empty, Orden = x => x.FechaBaja ?? DateTime.MaxValue, Ancho = "110px", SinEmbudo = true },
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Sesion.EnsureLoadedAsync();
+        if (!Sesion.EsAdministrador) { _loading = false; return; }
+        await CargarAsync();
+    }
+
+    private async Task CargarAsync()
+    {
+        _loading = true;
+        try { _items = (await Mantenimiento.DameEmpleadosAsync()).ToList(); }
+        catch (Exception ex) { Snackbar.Add($"Error al cargar: {ex.Message}", Severity.Error); }
+        finally { _loading = false; }
+    }
+
+    private async Task EditarAsync(EmpleadoVista? e)
+    {
+        if (!Sesion.EsAdministrador) return;
+        var parametros = new DialogParameters<EmpleadoDialog> { { x => x.Original, e } };
+        var dlg = await DialogService.ShowAsync<EmpleadoDialog>(e is null ? "Nuevo empleado" : "Editar empleado", parametros,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true });
+        var res = await dlg.Result;
+        if (res is { Canceled: false }) await CargarAsync();
+    }
+}

@@ -18,7 +18,7 @@
     <MudButton Variant="Variant.Filled" Size="Size.Small" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="CargarAsync" Disabled="_loading">Refrescar</MudButton>
 </div>
 
-<GtGrid T="GastoVista" @ref="_grid" Items="_gastos" Columnas="_cols" Loading="_loading" NombreExport="Gastos"
+<GtGrid T="GastoVista" @ref="_grid" Items="_gastos" Columnas="_cols" Loading="_loading" NombreExport="Gastos" OnFilaClick="AbrirDetalleAsync"
         TextoVacio="@(_consultado ? "No hay gastos para el periodo seleccionado." : "Selecciona el periodo y pulsa Refrescar.")">
     <ToolbarIzquierda>
         <MudDateRangePicker @bind-DateRange="_rango" Label="Fecha del gasto" Margin="Margin.Dense" Variant="Variant.Outlined"
@@ -86,6 +86,13 @@
         }
         catch (Exception ex) { Snackbar.Add($"Error al consultar los gastos: {ex.Message}", Severity.Error); }
         finally { _loading = false; }
+    }
+
+    private async Task AbrirDetalleAsync(GastoVista g)
+    {
+        var parametros = new DialogParameters<GastoDetalleDialog> { { d => d.Contador, g.Contador } };
+        await DialogService.ShowAsync<GastoDetalleDialog>($"Gasto nº {g.Contador}", parametros,
+            new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseOnEscapeKey = true, CloseButton = true });
     }
 
     private async Task AbrirCargaAsync()

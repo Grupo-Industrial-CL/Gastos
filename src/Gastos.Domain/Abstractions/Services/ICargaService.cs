@@ -17,6 +17,12 @@ public interface ICargaService
 
     Task<IReadOnlyList<Carga>> DameCargasAsync(int ultimas = 200, CancellationToken ct = default);
 
+    /// <summary>Comprobación previa del CSV de LayTours: formato y usuarios Epsilon sin asignar en la sociedad. No guarda nada.</summary>
+    Task<ResultadoComprobacion> ComprobarLayToursAsync(Stream csv, int codPais, CancellationToken ct = default);
+
+    /// <summary>Comprobación previa de una carga por API: pide los movimientos y lista las tarjetas que no están dadas de alta. No guarda nada.</summary>
+    Task<ResultadoComprobacion> ComprobarProveedorAsync(OrigenCarga origen, DateTime desde, DateTime hasta, CancellationToken ct = default);
+
     /// <summary>Proveedores de API registrados y si están configurados (para habilitar/deshabilitar opciones en la UI).</summary>
     IReadOnlyList<(OrigenCarga Origen, bool Configurado, string Detalle)> EstadoProveedores();
 }

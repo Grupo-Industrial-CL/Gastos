@@ -1,0 +1,127 @@
+@inject IMantenimientoService Mantenimiento
+@inject ICatalogoService Catalogos
+@inject ISnackbar Snackbar
+
+@* Alta / edición de una tarjeta de carburante. Al elegir el empleado se rellenan código y jerarquía (y el titular si está vacío),
+   como hacía frmCrearTarjetaSOLRED del VB6. *@
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudGrid Spacing="2">
+                <MudItem xs="8"><MudTextField T="string" @bind-Value="_t.NumTarjeta" Label="Número de tarjeta" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" RequiredError="Obligatorio" MaxLength="20" Disabled="@(!EsAlta)" /></MudItem>
+                <MudItem xs="4">
+                    <MudSelect T="string" @bind-Value="_t.Proveedor" Label="Proveedor" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
+                        <MudSelectItem T="string" Value="@("Repsol")">Repsol</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Moeve")">Moeve</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+            </MudGrid>
+            <MudSelect T="int" Value="_t.CodPais" ValueChanged="OnSociedadChanged" Label="Sociedad" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Class="mt-2">
+                @foreach (var s in _sociedades) { <MudSelectItem T="int" Value="@s.CodPais">@s.Nombre</MudSelectItem> }
+            </MudSelect>
+            <MudSelect T="int" Value="_t.Departamento" ValueChanged="OnDepartamentoChanged" Label="Departamento" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Class="mt-2">
+                <MudSelectItem T="int" Value="-1">Red comercial (no genera gasto interno)</MudSelectItem>
+                @foreach (var d in _departamentos.Where(d => d.CodPais == _t.CodPais)) { <MudSelectItem T="int" Value="@d.Codigo">@d.Descripcion (@d.Codigo)</MudSelectItem> }
+            </MudSelect>
+            @if (_t.Departamento != -1)
+            {
+                <MudSelect T="long" Value="_t.Codigo" ValueChanged="OnEmpleadoChanged" Label="Empleado" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Class="mt-2">
+                    @foreach (var e in _empleados.Where(e => e.CodPais == _t.CodPais && e.Departamento == _t.Departamento)) { <MudSelectItem T="long" Value="@e.Codigo">@e.Nombre (@e.Codigo)</MudSelectItem> }
+                </MudSelect>
+            }
+            else
+            {
+                <MudNumericField T="long" @bind-Value="_t.Codigo" Label="Código (red comercial)" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-2" />
+            }
+            <MudGrid Spacing="2" Class="mt-1">
+                <MudItem xs="8"><MudTextField T="string" @bind-Value="_t.Titular" Label="Titular" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="100" /></MudItem>
+                <MudItem xs="4"><MudTextField T="string" @bind-Value="_t.Jerarquia" Label="Jerarquía" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="10" /></MudItem>
+                <MudItem xs="8"><MudTextField T="string" @bind-Value="_t.Empresa" Label="Empresa (facturación)" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="100" /></MudItem>
+                <MudItem xs="4"><MudTextField T="string" @bind-Value="_t.CIF" Label="CIF" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="20" /></MudItem>
+            </MudGrid>
+            <MudSwitch T="bool" Value="_generaGasto" ValueChanged="@(v => { _generaGasto = v; _t.InsGastoInt = v ? "S" : "N"; })" Color="Color.Primary" Class="mt-2"
+                       Label="Sus movimientos generan gasto interno (solo se guarda el detalle si está desactivado)" Disabled="@(_t.Departamento == -1)" />
+            <MudSwitch T="bool" @bind-Value="_t.Activo" Color="Color.Primary" Label="Activa" />
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => Dialog.Cancel())">Cancelar</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="GuardarAsync" Disabled="_guardando">Guardar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private MudDialogInstance Dialog { get; set; } = default!;
+    [Parameter] public TarjetaVista? Original { get; set; }
+
+    private MudForm _form = default!;
+    private TarjetaCarburante _t = new() { Proveedor = "Repsol", Activo = true, InsGastoInt = "S" };
+    private bool _generaGasto = true;
+    private List<Sociedad> _sociedades = new();
+    private List<Departamento> _departamentos = new();
+    private List<EmpleadoVista> _empleados = new();
+    private bool _guardando;
+    private bool EsAlta => Original is null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Original is not null)
+        {
+            _t = new TarjetaCarburante
+            {
+                NumTarjeta = Original.NumTarjeta, Proveedor = Original.Proveedor, CodPais = Original.CodPais, Titular = Original.Titular, Empresa = Original.Empresa,
+                CIF = Original.CIF, Departamento = Original.Departamento, Codigo = Original.Codigo, Jerarquia = Original.Jerarquia, InsGastoInt = Original.InsGastoInt, Activo = Original.Activo
+            };
+            _generaGasto = string.Equals(_t.InsGastoInt?.Trim(), "S", StringComparison.OrdinalIgnoreCase);
+        }
+        try
+        {
+            _sociedades = (await Catalogos.DameSociedadesAsync(soloActivas: false)).ToList();
+            _departamentos = (await Catalogos.DameDepartamentosAsync()).ToList();
+            _empleados = (await Mantenimiento.DameEmpleadosAsync()).Where(e => e.FechaBaja is null || e.FechaBaja > DateTime.Today).ToList();
+        }
+        catch (Exception ex) { Snackbar.Add($"Error al cargar catálogos: {ex.Message}", Severity.Error); }
+        if (EsAlta && _t.CodPais == 0 && _sociedades.Count > 0) OnSociedadChanged(_sociedades[0].CodPais);
+    }
+
+    private void OnSociedadChanged(int codPais)
+    {
+        _t.CodPais = codPais;
+        // Empresa y CIF de facturación: se heredan de otra tarjeta de la misma sociedad (como el VB6) si están vacíos.
+        OnDepartamentoChanged(_departamentos.FirstOrDefault(d => d.CodPais == codPais)?.Codigo ?? -1);
+    }
+
+    private void OnDepartamentoChanged(int dep)
+    {
+        _t.Departamento = dep;
+        _t.Codigo = 0;
+        if (dep == -1) { _generaGasto = false; _t.InsGastoInt = "N"; }
+        var primero = _empleados.FirstOrDefault(e => e.CodPais == _t.CodPais && e.Departamento == dep);
+        if (primero is not null) OnEmpleadoChanged(primero.Codigo);
+    }
+
+    private void OnEmpleadoChanged(long codigo)
+    {
+        _t.Codigo = codigo;
+        var e = _empleados.FirstOrDefault(x => x.CodPais == _t.CodPais && x.Departamento == _t.Departamento && x.Codigo == codigo);
+        if (e is null) return;
+        _t.Jerarquia = e.Jerarquia;
+        if (string.IsNullOrWhiteSpace(_t.Titular)) _t.Titular = e.Nombre;
+    }
+
+    private async Task GuardarAsync()
+    {
+        await _form.Validate();
+        if (!_form.IsValid) return;
+        _guardando = true;
+        try
+        {
+            await Mantenimiento.GuardarTarjetaAsync(_t, EsAlta);
+            Snackbar.Add("Tarjeta guardada.", Severity.Success);
+            Dialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _guardando = false; }
+    }
+}

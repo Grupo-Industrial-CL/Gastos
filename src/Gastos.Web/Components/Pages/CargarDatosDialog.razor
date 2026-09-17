@@ -14,7 +14,7 @@
         @if (_resultado is null)
         {
             <MudText Typo="Typo.body2" Class="mb-3 mud-text-secondary">Elige el origen de los datos. La carga es "todo o nada": si hay algún error no se guarda ningún registro.</MudText>
-            <MudRadioGroup T="OrigenCarga" @bind-Value="_origen">
+            <MudRadioGroup T="OrigenCarga" Value="_origen" ValueChanged="@((OrigenCarga o) => { _origen = o; _comprobacion = null; })">
                 @foreach (var p in _proveedores)
                 {
                     <MudRadio T="OrigenCarga" Value="@p.Origen" Color="Color.Primary" Disabled="@(!p.Configurado)">
@@ -57,6 +57,28 @@
             {
                 <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mt-4" />
             }
+            @if (_comprobacion is not null)
+            {
+                <MudAlert Severity="@(!_comprobacion.Ok ? Severity.Error : _comprobacion.PuedeCargar ? Severity.Success : Severity.Warning)" Class="mt-3" Dense="true">@_comprobacion.Mensaje</MudAlert>
+                @if (_comprobacion.Faltantes.Count > 0)
+                {
+                    <MudSimpleTable Dense="true" Elevation="0" Class="mt-2" Style="max-height:220px;overflow:auto">
+                        <thead><tr><th>@(_origen == OrigenCarga.LayTours ? "Usuario Epsilon" : "Tarjeta")</th><th style="text-align:right">Mov.</th><th>Detalle</th></tr></thead>
+                        <tbody>
+                            @foreach (var f in _comprobacion.Faltantes) { <tr><td><b>@f.Clave</b></td><td style="text-align:right">@f.Ocurrencias</td><td>@f.Detalle</td></tr> }
+                        </tbody>
+                    </MudSimpleTable>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-1">
+                        Dalos de alta en Configuración → @(_origen == OrigenCarga.LayTours ? "Empleados (campo Id Epsilon)" : "Tarjetas") y vuelve a comprobar. La carga no se hará mientras falten.
+                    </MudText>
+                }
+                @if (_comprobacion.Avisos.Count > 0)
+                {
+                    <div class="mt-2" style="max-height:120px;overflow:auto">
+                        @foreach (var a in _comprobacion.Avisos) { <MudText Typo="Typo.caption" Class="d-block">• @a</MudText> }
+                    </div>
+                }
+            }
         }
         else
         {
@@ -85,7 +107,8 @@
         @if (_resultado is null)
         {
             <MudButton OnClick="@(() => Dialog.Cancel())" Disabled="_ejecutando">Cancelar</MudButton>
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="EjecutarAsync" Disabled="@(_ejecutando || !PuedeEjecutar)">Cargar</MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.FactCheck" OnClick="ComprobarAsync" Disabled="@(_ejecutando || !PuedeEjecutar)">Comprobar</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="EjecutarAsync" Disabled="@(_ejecutando || !PuedeEjecutar || (_comprobacion is { PuedeCargar: false }))">Cargar</MudButton>
         }
         else
         {
@@ -105,6 +128,7 @@
     private DateRange _rango = new(DateTime.Today.AddMonths(-1), DateTime.Today);
     private bool _ejecutando;
     private ResultadoCarga? _resultado;
+    private ResultadoComprobacion? _comprobacion;
 
     private bool PuedeEjecutar => _origen == OrigenCarga.LayTours
         ? _codPais is not null && _fichero is not null
@@ -121,7 +145,31 @@
         catch (Exception ex) { Snackbar.Add($"Error al cargar sociedades: {ex.Message}", Severity.Error); }
     }
 
-    private void OnFichero(IBrowserFile? f) => _fichero = f;
+    private void OnFichero(IBrowserFile? f) { _fichero = f; _comprobacion = null; }
+
+    // Comprobación previa (equivale a "Comprobar fichero" / "Comprobar tarjetas" del VB6): no guarda nada.
+    private async Task ComprobarAsync()
+    {
+        _ejecutando = true;
+        _comprobacion = null;
+        try
+        {
+            if (_origen == OrigenCarga.LayTours)
+            {
+                await using var stream = _fichero!.OpenReadStream(maxAllowedSize: 20 * 1024 * 1024);
+                using var ms = new MemoryStream();
+                await stream.CopyToAsync(ms);
+                ms.Position = 0;
+                _comprobacion = await CargaService.ComprobarLayToursAsync(ms, _codPais!.Value);
+            }
+            else
+            {
+                _comprobacion = await CargaService.ComprobarProveedorAsync(_origen, _rango.Start!.Value, _rango.End!.Value);
+            }
+        }
+        catch (Exception ex) { _comprobacion = new ResultadoComprobacion { Ok = false, Mensaje = $"Error al comprobar: {ex.Message}" }; }
+        finally { _ejecutando = false; }
+    }
 
     private async Task EjecutarAsync()
     {

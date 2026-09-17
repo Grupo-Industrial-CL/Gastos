@@ -36,8 +36,8 @@
 
 7. **Alcance**: solo gastos internos. Los movimientos de tarjetas de la red comercial (`Departamento = -1`) se guardan
    como detalle sin generar gasto (el VB6 los insertaba en `gastos`, con conversión a pesetas).
-8. **Mantenimiento de catálogos** (tarjetas, empleados, departamentos) desde el portal: hoy solo se cargan por script.
-   Si se quiere editar desde la web, añadir pantallas en Configuración.
-9. **Programar las cargas por API** (job nocturno) además del botón manual, si el volumen lo justifica.
+8. ~~Mantenimiento de catálogos desde el portal~~ Hecho: Configuración → Departamentos / Empleados / Tarjetas.
+9. ~~Programar las cargas por API~~ Hecho: `CargasProgramadas` en `appsettings.json` (activar con `Habilitado=true`
+   cuando las APIs estén configuradas; hora y días hacia atrás configurables).
 10. **Credenciales en el código VB6**: `legacy/vb6/GastosVB6/Inicio.bas` contiene usuario y contraseña de Informix y ya
     está en el historial de git. Cambiar esa contraseña en Informix y valorar limpiar el historial.

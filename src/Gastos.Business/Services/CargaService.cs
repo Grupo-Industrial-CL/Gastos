@@ -41,6 +41,86 @@ public sealed class CargaService : ICargaService
             SELECT TOP (@n) Id, Origen, Fecha, Usuario, Desde, Hasta, CodPais, NombreFichero, Filas, Insertados, Omitidos, Estado, Mensaje
             FROM dbo.GT_Cargas ORDER BY Id DESC", new { n = ultimas }, ct);
 
+    // ───────────────────────────── Comprobaciones previas (sin guardar nada) ─────────────────────────────
+
+    public async Task<ResultadoComprobacion> ComprobarLayToursAsync(Stream csv, int codPais, CancellationToken ct = default)
+    {
+        ResultadoParseoLayTours parseo;
+        using (var lector = new StreamReader(csv, Encoding.Latin1, detectEncodingFromByteOrderMarks: true))
+            parseo = LayToursParser.Parsear(lector);
+        var r = new ResultadoComprobacion { Ok = parseo.Ok, Filas = parseo.Lineas.Count };
+        if (!parseo.Ok) { r.Mensaje = parseo.Error!; return r; }
+
+        var ids = parseo.Lineas.Select(l => l.UsuarioEpsilon).Distinct().ToList();
+        var existentes = (await _sql.QueryAsync<string>(
+            "SELECT Id_Epsilon FROM dbo.GT_UsuariosPersonal WHERE CodPais = @codPais AND Id_Epsilon IN @ids", new { codPais, ids }, ct))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var g in parseo.Lineas.Where(l => !existentes.Contains(l.UsuarioEpsilon)).GroupBy(l => l.UsuarioEpsilon))
+            r.Faltantes.Add(new ElementoFaltante
+            {
+                Clave = g.Key, Ocurrencias = g.Count(),
+                Detalle = $"filas {string.Join(", ", g.Select(l => l.Fila).Take(8))}{(g.Count() > 8 ? "…" : string.Empty)} · {g.Sum(l => l.Importe):N2} €"
+            });
+
+        var tipo = "I";
+        if (!PaisesTipoInterno.Contains(codPais))
+            tipo = await _sql.QueryFirstOrDefaultAsync<string>("SELECT TOP 1 Id FROM dbo.GT_GastosSociedades WHERE CodPais = @codPais", new { codPais }, ct) ?? "I";
+        var nombres = parseo.Lineas.Select(l => l.NombreGasto).Distinct().ToList();
+        var tiposExistentes = (await _sql.QueryAsync<string>(
+            "SELECT NombreGasto FROM dbo.GT_TiposGasto WHERE Tipo = @tipo AND NombreGasto IN @nombres", new { tipo, nombres }, ct)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var n in nombres.Where(n => !tiposExistentes.Contains(n)))
+            r.Avisos.Add($"Falta el tipo de gasto '{n}' (tipo '{tipo}') en GT_TiposGasto: la carga fallará hasta darlo de alta.");
+
+        r.Mensaje = r.Faltantes.Count == 0 && r.Avisos.Count == 0
+            ? $"Fichero correcto: {r.Filas} fila(s), todos los usuarios Epsilon están asignados. Se puede cargar."
+            : $"Fichero con formato correcto ({r.Filas} filas) pero hay {r.Faltantes.Count} usuario(s) Epsilon sin asignar en el sistema de gastos.";
+        return r;
+    }
+
+    public async Task<ResultadoComprobacion> ComprobarProveedorAsync(OrigenCarga origen, DateTime desde, DateTime hasta, CancellationToken ct = default)
+    {
+        var r = new ResultadoComprobacion();
+        var proveedor = _proveedores.FirstOrDefault(p => p.Origen == origen);
+        if (proveedor is null || !proveedor.Configurado) { r.Mensaje = $"La API de {origen.Codigo()} no está configurada."; return r; }
+
+        IReadOnlyList<MovimientoTarjeta> movimientos;
+        try { movimientos = await proveedor.ObtenerMovimientosAsync(desde, hasta, ct); }
+        catch (Exception ex) when (ex is not OperationCanceledException) { r.Mensaje = $"Error al llamar a la API de {origen.Codigo()}: {ex.Message}"; return r; }
+
+        r.Ok = true;
+        r.Filas = movimientos.Count;
+        await ComprobarTarjetasAsync(_sql, movimientos, r, ct);
+        r.Mensaje = r.Filas == 0 ? "La API no devuelve movimientos en el periodo."
+            : r.Faltantes.Count == 0 ? $"{r.Filas} movimiento(s); todas las tarjetas están dadas de alta. Se puede cargar."
+            : $"{r.Filas} movimiento(s); hay {r.Faltantes.Count} tarjeta(s) sin dar de alta en el sistema.";
+        return r;
+    }
+
+    /// <summary>Rellena Faltantes con las tarjetas de los movimientos que no existen en GT_TarjetasSolred (y avisa de las de red comercial).</summary>
+    private static async Task ComprobarTarjetasAsync(ISqlComandos sql, IReadOnlyList<MovimientoTarjeta> movimientos, ResultadoComprobacion r, CancellationToken ct)
+    {
+        if (movimientos.Count == 0) return;
+        var numeros = movimientos.Select(m => ClasificadorCarburante.NormalizarTarjeta(m.NumTarjeta)).Distinct().ToList();
+        var tarjetas = (await sql.QueryAsync<TarjetaCarburante>(
+                "SELECT NumTarjeta, Proveedor, CodPais, Titular, Departamento, Codigo, Jerarquia, Ins_Gasto_Int, Activo FROM dbo.GT_TarjetasSolred WHERE NumTarjeta IN @numeros",
+                new { numeros }, ct)).ToDictionary(t => t.NumTarjeta, StringComparer.OrdinalIgnoreCase);
+        foreach (var g in movimientos.GroupBy(m => ClasificadorCarburante.NormalizarTarjeta(m.NumTarjeta)))
+        {
+            if (tarjetas.TryGetValue(g.Key, out var t))
+            {
+                if (t.Departamento == -1) r.Avisos.Add($"Tarjeta {g.Key} de la red comercial ({g.Count()} mov.): se guardará el detalle sin generar gasto.");
+                else if (!string.Equals(t.InsGastoInt?.Trim(), "S", StringComparison.OrdinalIgnoreCase)) r.Avisos.Add($"Tarjeta {g.Key} sin 'insertar gasto interno' ({g.Count()} mov.): solo se guardará el detalle.");
+                continue;
+            }
+            var ej = g.First();
+            r.Faltantes.Add(new ElementoFaltante
+            {
+                Clave = g.Key, Ocurrencias = g.Count(),
+                Detalle = $"{ej.Conductor} · {ej.Matricula} · {g.Sum(m => m.ImporteTotal):N2} €"
+            });
+        }
+    }
+
     // ───────────────────────────── LayTours ─────────────────────────────
 
     public async Task<ResultadoCarga> CargarLayToursAsync(Stream csv, int codPais, string usuario, string nombreFichero, CancellationToken ct = default)

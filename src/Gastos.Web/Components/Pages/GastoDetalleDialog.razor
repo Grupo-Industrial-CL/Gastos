@@ -1,0 +1,87 @@
+@inject IGastoService GastoService
+@inject SesionUsuario Sesion
+
+@* Detalle de un gasto interno: datos del gasto, movimiento de tarjeta asociado (Repsol/Moeve) y carga que lo generó. *@
+
+<MudDialog>
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+        }
+        else if (_det is null)
+        {
+            <MudAlert Severity="Severity.Warning">No se ha encontrado el gasto o no tienes acceso a su sociedad.</MudAlert>
+        }
+        else
+        {
+            var g = _det.Gasto; var r = _det.Registro;
+            <MudGrid>
+                <MudItem xs="12" md="@(_det.Movimiento is null ? 12 : 6)">
+                    <MudText Typo="Typo.subtitle1" Class="mb-1"><MudIcon Icon="@Icons.Material.Filled.Receipt" Size="Size.Small" Class="mr-1" />Gasto</MudText>
+                    <dl class="gt-detalle">
+                        <dt>Sociedad</dt><dd>@g.Sociedad</dd>
+                        <dt>Departamento</dt><dd>@(g.DepartamentoNombre.Length > 0 ? g.DepartamentoNombre : g.Departamento.ToString())</dd>
+                        <dt>Empleado</dt><dd>@(g.Empleado.Length > 0 ? g.Empleado : g.Codigo.ToString()) <span class="mud-text-secondary">(código @g.Codigo@(g.Jerarquia.Length > 0 ? $", jerarquía {g.Jerarquia}" : string.Empty))</span></dd>
+                        <dt>Fecha</dt><dd>@g.Fecha.ToString("dd/MM/yyyy")</dd>
+                        <dt>Tipo de gasto</dt><dd>@g.TipoGastoNombre <span class="mud-text-secondary">(código @g.TipoGasto)</span></dd>
+                        <dt>Concepto / lugar</dt><dd>@g.Donde</dd>
+                        <dt>Importe</dt><dd><b>@g.Importe.ToString("N2") @g.Moneda</b>@(r.ImporteOri is not null ? $" (original {r.ImporteOri:N2})" : string.Empty)</dd>
+                        @if (!string.IsNullOrWhiteSpace(g.Factura)) { <dt>Factura</dt><dd>@g.Factura</dd> }
+                        @if (g.Numero != 0) { <dt>Número (días / unidades)</dt><dd>@g.Numero</dd> }
+                        @if (!string.IsNullOrWhiteSpace(r.Proveedor)) { <dt>Proveedor</dt><dd>@r.Proveedor</dd> }
+                        @if (!string.IsNullOrWhiteSpace(r.PepCeco)) { <dt>PEP / CECO</dt><dd>@r.PepCeco</dd> }
+                        <dt>Estado</dt>
+                        <dd>
+                            <MudChip T="string" Size="Size.Small" Color="@(g.Validado == "S" ? Color.Success : Color.Default)">@(g.Validado == "S" ? "Validado" : "Sin validar")</MudChip>
+                            <MudChip T="string" Size="Size.Small" Color="@(g.Pagado == "S" ? Color.Success : Color.Default)">@(g.Pagado == "S" ? "Pagado" : "Sin pagar")</MudChip>
+                            <MudChip T="string" Size="Size.Small" Color="@(g.ContaSAP == "S" ? Color.Info : Color.Default)">@(g.ContaSAP == "S" ? $"SAP {r.DocumentoSAP}" : "Sin contabilizar")</MudChip>
+                        </dd>
+                        @if (!string.IsNullOrWhiteSpace(g.Validacion)) { <dt>Validación</dt><dd>@g.Validacion</dd> }
+                        @if (!string.IsNullOrWhiteSpace(r.ArchivadoEn)) { <dt>Archivado en</dt><dd>@r.ArchivadoEn</dd> }
+                    </dl>
+                </MudItem>
+                @if (_det.Movimiento is not null)
+                {
+                    var m = _det.Movimiento;
+                    <MudItem xs="12" md="6">
+                        <MudText Typo="Typo.subtitle1" Class="mb-1"><MudIcon Icon="@Icons.Material.Filled.CreditCard" Size="Size.Small" Class="mr-1" />Movimiento de tarjeta @_det.ProveedorMovimiento</MudText>
+                        <dl class="gt-detalle">
+                            <dt>Tarjeta</dt><dd>@m.NumTarjeta</dd>
+                            <dt>Conductor / matrícula</dt><dd>@m.Conductor · @m.Matricula</dd>
+                            <dt>Fecha y hora</dt><dd>@m.FecOperacion.ToString("dd/MM/yyyy") @m.HorOperacion</dd>
+                            <dt>Población</dt><dd>@m.Poblacion @(string.IsNullOrWhiteSpace(m.InfoAux) ? string.Empty : $"({m.InfoAux})")</dd>
+                            <dt>Producto</dt><dd>@m.DesProd</dd>
+                            <dt>Litros / precio</dt><dd>@m.NumLitros.ToString("N3") l · @m.PrecioLitro.ToString("N4") €/l</dd>
+                            <dt>Importe</dt><dd><b>@m.ImpTotal.ToString("N2") €</b> con IVA (@m.IVA.ToString("N0") %) · @m.ImpTotalSinIVA.ToString("N2") € sin IVA</dd>
+                            @if (m.Km > 0) { <dt>Kilómetros</dt><dd>@m.Km.ToString("N0")</dd> }
+                            <dt>Factura</dt><dd>@m.Factura (@m.AnyoFact)</dd>
+                        </dl>
+                    </MudItem>
+                }
+            </MudGrid>
+            <MudDivider Class="my-3" />
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Registro nº @g.Contador · origen @(g.Origen ?? "desconocido (migrado)") · insertado @(g.FechaInsert?.ToString("dd/MM/yyyy HH:mm") ?? "-")
+                @if (_det.Carga is not null) { <text> · carga nº @_det.Carga.Id por @_det.Carga.Usuario (@_det.Carga.Fecha.ToString("dd/MM/yyyy HH:mm"))</text> }
+            </MudText>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => Dialog.Close())">Cerrar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private MudDialogInstance Dialog { get; set; } = default!;
+    [Parameter] public long Contador { get; set; }
+    private GastoDetalle? _det;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Sesion.EnsureLoadedAsync();
+        try { _det = await GastoService.DameDetalleAsync(Contador, Sesion.SociedadesVisibles); }
+        finally { _loading = false; }
+    }
+}

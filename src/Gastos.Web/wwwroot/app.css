@@ -43,3 +43,10 @@ html, body {
 
 /* Importes alineados a la derecha. */
 .gt-num { text-align: right; display: block; width: 100%; }
+
+/* Filas clicables (detalle): cursor de mano. */
+.gt-grid-clicable tbody tr { cursor: pointer; }
+
+/* Ficha de detalle: pares etiqueta/valor. */
+.gt-detalle dt { color: var(--mud-palette-text-secondary); font-size: .78rem; margin-top: 8px; }
+.gt-detalle dd { margin: 0; font-size: .95rem; }

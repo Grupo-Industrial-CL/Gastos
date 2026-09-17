@@ -90,6 +90,10 @@ builder.Services.AddGastosData(builder.Configuration);
 builder.Services.AddGastosBusiness(builder.Configuration);
 builder.Services.AddScoped<SesionUsuario>();
 
+// Carga programada diaria por API (Repsol/Moeve). Sección CargasProgramadas; deshabilitada por defecto.
+builder.Services.Configure<CargasProgramadasOptions>(builder.Configuration.GetSection("CargasProgramadas"));
+builder.Services.AddHostedService<CargaProgramadaBackgroundService>();
+
 var app = builder.Build();
 
 app.UseRequestLocalization(new RequestLocalizationOptions

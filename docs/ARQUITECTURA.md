@@ -31,7 +31,9 @@ Gastos.Domain  (entidades GT_*, modelos, enums, contratos)  ← sin dependencias
 - **Business** registra los servicios por convención (`IXxxService -> XxxService`) y los dos clientes de API como
   `IProveedorTarjetaCarburante` (Repsol, Moeve).
 - **Web** aporta `SesionUsuario` (identidad + rol + sociedades por circuito), el layout con el *gate* de acceso, el grid
-  reutilizable `GtGrid` y las páginas.
+  reutilizable `GtGrid` (con clic de fila para el detalle), las páginas y el servicio de carga programada.
+- `IMantenimientoService` (Business) da soporte a las pantallas de Configuración de departamentos, empleados y tarjetas:
+  altas y modificaciones con SQL parametrizado; las bajas son lógicas (`Activo`, `FechaBaja`).
 
 ## Modelo de datos (SQL Server, prefijo `GT_`)
 
@@ -82,6 +84,13 @@ detalle; fecha `ddMMyyyy`; nº días; destino), validación campo a campo con el
    gasto interno con la clasificación del VB6 (Gasolina por defecto; Parking / Peaje / Otros gastos según la descripción
    del producto; importe sin IVA redondeado a 2 decimales; `VISA='R'`, `Validacion='Carga SolRed'|'Carga Moeve'`).
 5. Siempre se guarda el detalle del movimiento en `GT_GastosSolred` o `GT_GastosMoeve`.
+
+**Comprobación previa** (`ComprobarLayToursAsync` / `ComprobarProveedorAsync`): equivale a los botones "Comprobar fichero" y
+"Comprobar tarjetas" del VB6. Lee el fichero o la API sin guardar nada y devuelve los usuarios Epsilon o tarjetas que faltan
+(con ocurrencias e importe) para darlos de alta en Configuración antes de cargar.
+
+**Carga programada** (`CargaProgramadaBackgroundService`, Web): una vez al día a la hora configurada pide a cada API los
+movimientos de los últimos N días y llama al mismo `CargarProveedorAsync` (idempotente). Usuario "Carga programada" en `GT_Cargas`.
 
 `SolredCsvParser` conserva el lector del CSV antiguo: sirve para el **modo simulado** de las APIs en desarrollo
 (`Proveedores:Repsol:Simulado=true` + `FicheroSimulacion`) y para cargar históricos si hiciera falta.

@@ -1,0 +1,59 @@
+@inject IMantenimientoService Mantenimiento
+@inject ICatalogoService Catalogos
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudSelect T="int" @bind-Value="_d.CodPais" Label="Sociedad" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Disabled="@(!EsAlta)" Required="true" Class="mb-2">
+                @foreach (var s in _sociedades) { <MudSelectItem T="int" Value="@s.CodPais">@s.Nombre</MudSelectItem> }
+            </MudSelect>
+            <MudNumericField T="int" @bind-Value="_d.Codigo" Label="Código" Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!EsAlta)" Required="true" Class="mb-2" />
+            <MudTextField T="string" @bind-Value="_d.Descripcion" Label="Descripción" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" RequiredError="Obligatoria" MaxLength="100" Class="mb-2" />
+            <MudGrid Spacing="2">
+                <MudItem xs="8"><MudTextField T="string" @bind-Value="_d.CECO" Label="CECO" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="30" /></MudItem>
+                <MudItem xs="4"><MudTextField T="string" @bind-Value="_d.Divisa" Label="Divisa" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="3" Placeholder="EUR" /></MudItem>
+            </MudGrid>
+            <MudSwitch T="bool" @bind-Value="_d.Activo" Color="Color.Primary" Label="Activo" Class="mt-2" />
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => Dialog.Cancel())">Cancelar</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="GuardarAsync" Disabled="_guardando">Guardar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private MudDialogInstance Dialog { get; set; } = default!;
+    [Parameter] public DepartamentoVista? Original { get; set; }
+
+    private MudForm _form = default!;
+    private Departamento _d = new() { Activo = true, Divisa = "EUR" };
+    private List<Sociedad> _sociedades = new();
+    private bool _guardando;
+    private bool EsAlta => Original is null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Original is not null)
+            _d = new Departamento { CodPais = Original.CodPais, Codigo = Original.Codigo, Descripcion = Original.Descripcion, CECO = Original.CECO, Divisa = Original.Divisa, Activo = Original.Activo };
+        try { _sociedades = (await Catalogos.DameSociedadesAsync(soloActivas: false)).ToList(); }
+        catch (Exception ex) { Snackbar.Add($"Error al cargar sociedades: {ex.Message}", Severity.Error); }
+        if (EsAlta && _d.CodPais == 0 && _sociedades.Count > 0) _d.CodPais = _sociedades[0].CodPais;
+    }
+
+    private async Task GuardarAsync()
+    {
+        await _form.Validate();
+        if (!_form.IsValid) return;
+        _guardando = true;
+        try
+        {
+            await Mantenimiento.GuardarDepartamentoAsync(_d, EsAlta);
+            Snackbar.Add("Departamento guardado.", Severity.Success);
+            Dialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _guardando = false; }
+    }
+}

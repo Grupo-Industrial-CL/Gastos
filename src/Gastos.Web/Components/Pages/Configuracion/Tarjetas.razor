@@ -1,0 +1,81 @@
+@page "/config/tarjetas"
+@attribute [Authorize]
+@inject IMantenimientoService Mantenimiento
+@inject SesionUsuario Sesion
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>Tarjetas de carburante</PageTitle>
+
+<div class="d-flex align-center flex-wrap mb-2" style="gap:.75rem">
+    <MudText Typo="Typo.h4"><h1 style="all:inherit;margin:0">Tarjetas de carburante</h1></MudText>
+    <MudSpacer />
+    <MudButton Variant="Variant.Filled" Size="Size.Small" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AddCard" OnClick="@(() => EditarAsync(null))">Nueva tarjeta</MudButton>
+</div>
+<MudText Typo="Typo.body2" Class="mb-3 mud-text-secondary">
+    Tarjetas Repsol (Solred) y Moeve asignadas a cada empleado. Un movimiento de una tarjeta no dada de alta detiene la carga; usa <b>Comprobar</b> en "Cargar datos" para verlas antes.
+</MudText>
+
+@if (!Sesion.EsAdministrador)
+{
+    <MudAlert Severity="Severity.Warning">Solo los Administradores pueden configurar tarjetas.</MudAlert>
+}
+else
+{
+    <GtGrid T="TarjetaVista" Items="Visibles" Columnas="_cols" Loading="_loading" NombreExport="Tarjetas" RowsPerPage="50" OnFilaClick="@(t => EditarAsync(t))"
+            TextoVacio="No hay tarjetas. Se cargan con la migración desde Informix o dándolas de alta aquí.">
+        <ToolbarIzquierda>
+            <MudSwitch T="bool" @bind-Value="_mostrarInactivas" Color="Color.Default" Label="Mostrar inactivas" Class="ml-2" />
+        </ToolbarIzquierda>
+        <Acciones Context="t">
+            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary" OnClick="@(() => EditarAsync(t))" />
+        </Acciones>
+    </GtGrid>
+}
+
+@code {
+    private List<TarjetaVista> _items = new();
+    private bool _loading = true;
+    private bool _mostrarInactivas;
+    private IEnumerable<TarjetaVista> Visibles => _items.Where(t => _mostrarInactivas || t.Activo);
+
+    private readonly List<GtColumna<TarjetaVista>> _cols = new()
+    {
+        new() { Titulo = "Tarjeta", Valor = x => x.NumTarjeta, Ancho = "170px", SinEmbudo = true },
+        new() { Titulo = "Proveedor", Valor = x => x.Proveedor, Ancho = "100px",
+                Plantilla = t => @<MudChip T="string" Size="Size.Small" Color="@(t.Proveedor == "Moeve" ? Color.Info : Color.Warning)">@t.Proveedor</MudChip> },
+        new() { Titulo = "Sociedad", Valor = x => x.SociedadNombre, Ancho = "170px" },
+        new() { Titulo = "Departamento", Valor = x => x.DepartamentoNombre, Ancho = "160px" },
+        new() { Titulo = "Empleado", Valor = x => x.EmpleadoNombre.Length > 0 ? x.EmpleadoNombre : (x.Codigo > 0 ? x.Codigo.ToString() : string.Empty), Ancho = "200px", SinEmbudo = true },
+        new() { Titulo = "Titular", Valor = x => x.Titular ?? string.Empty, Ancho = "180px", SinEmbudo = true },
+        new() { Titulo = "Empresa", Valor = x => x.Empresa ?? string.Empty, Ancho = "160px" },
+        new() { Titulo = "Genera gasto", Valor = x => string.Equals(x.InsGastoInt?.Trim(), "S", StringComparison.OrdinalIgnoreCase) ? "Sí" : "No", Ancho = "110px" },
+        new() { Titulo = "Activa", Valor = x => x.Activo ? "Sí" : "No", Ancho = "80px",
+                Plantilla = t => @<MudChip T="string" Size="Size.Small" Color="@(t.Activo ? Color.Success : Color.Default)">@(t.Activo ? "Sí" : "No")</MudChip> },
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Sesion.EnsureLoadedAsync();
+        if (!Sesion.EsAdministrador) { _loading = false; return; }
+        await CargarAsync();
+    }
+
+    private async Task CargarAsync()
+    {
+        _loading = true;
+        try { _items = (await Mantenimiento.DameTarjetasAsync()).ToList(); }
+        catch (Exception ex) { Snackbar.Add($"Error al cargar: {ex.Message}", Severity.Error); }
+        finally { _loading = false; }
+    }
+
+    private async Task EditarAsync(TarjetaVista? t)
+    {
+        if (!Sesion.EsAdministrador) return;
+        var parametros = new DialogParameters<TarjetaDialog> { { x => x.Original, t } };
+        var dlg = await DialogService.ShowAsync<TarjetaDialog>(t is null ? "Nueva tarjeta" : $"Tarjeta {t.NumTarjeta}", parametros,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true });
+        var res = await dlg.Result;
+        if (res is { Canceled: false }) await CargarAsync();
+    }
+}

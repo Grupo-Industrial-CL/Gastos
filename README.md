@@ -19,6 +19,11 @@ aplicación antigua **Gastos (Visual Basic 6 sobre Informix)**, cuyo código fue
 | **Cargar datos** (botón en Gastos) | Administrador | Origen **Repsol** o **Moeve** (API, entre fechas) o **LayTours** (subida del CSV para una sociedad). Carga "todo o nada" con resumen de insertados/omitidos. |
 | **Historial de cargas** (`/cargas`) | Administrador | Registro de todas las cargas (correctas y fallidas). |
 | **Configuración → Usuarios y permisos** (`/config/usuarios`) | Administrador | Asigna rol a cada usuario de Azure y, a los Consultores, las sociedades a las que acceden. |
+| **Configuración → Departamentos / Empleados / Tarjetas de carburante** | Administrador | Mantenimiento de los catálogos que usan las cargas (alta y edición; bajas lógicas). |
+
+Además: al pulsar una fila de Gastos se abre el **detalle** (gasto, movimiento de tarjeta y carga que lo generó); el diálogo
+"Cargar datos" tiene un botón **Comprobar** que lista las tarjetas o usuarios Epsilon sin dar de alta antes de cargar; y existe
+una **carga programada** diaria por API (sección `CargasProgramadas` de `appsettings.json`, deshabilitada por defecto).
 
 ## Estructura
 

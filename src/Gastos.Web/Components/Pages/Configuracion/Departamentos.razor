@@ -1,0 +1,74 @@
+@page "/config/departamentos"
+@attribute [Authorize]
+@inject IMantenimientoService Mantenimiento
+@inject SesionUsuario Sesion
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>Departamentos</PageTitle>
+
+<div class="d-flex align-center flex-wrap mb-2" style="gap:.75rem">
+    <MudText Typo="Typo.h4"><h1 style="all:inherit;margin:0">Departamentos</h1></MudText>
+    <MudSpacer />
+    <MudButton Variant="Variant.Filled" Size="Size.Small" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => EditarAsync(null))">Nuevo departamento</MudButton>
+</div>
+
+@if (!Sesion.EsAdministrador)
+{
+    <MudAlert Severity="Severity.Warning">Solo los Administradores pueden configurar departamentos.</MudAlert>
+}
+else
+{
+    <GtGrid T="DepartamentoVista" Items="Visibles" Columnas="_cols" Loading="_loading" NombreExport="Departamentos" RowsPerPage="20" OnFilaClick="@(d => EditarAsync(d))"
+            TextoVacio="No hay departamentos. Se cargan con la migración desde Informix o dándolos de alta aquí.">
+        <ToolbarIzquierda>
+            <MudSwitch T="bool" @bind-Value="_mostrarInactivos" Color="Color.Default" Label="Mostrar inactivos" Class="ml-2" />
+        </ToolbarIzquierda>
+        <Acciones Context="d">
+            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary" OnClick="@(() => EditarAsync(d))" />
+        </Acciones>
+    </GtGrid>
+}
+
+@code {
+    private List<DepartamentoVista> _items = new();
+    private bool _loading = true;
+    private bool _mostrarInactivos;
+    private IEnumerable<DepartamentoVista> Visibles => _items.Where(d => _mostrarInactivos || d.Activo);
+
+    private readonly List<GtColumna<DepartamentoVista>> _cols = new()
+    {
+        new() { Titulo = "Sociedad", Valor = x => x.SociedadNombre, Ancho = "200px" },
+        new() { Titulo = "Código", Valor = x => x.Codigo.ToString(), Orden = x => x.Codigo, Numero = x => x.Codigo, Ancho = "90px", SinEmbudo = true, Derecha = true },
+        new() { Titulo = "Descripción", Valor = x => x.Descripcion, SinEmbudo = true },
+        new() { Titulo = "CECO", Valor = x => x.CECO ?? string.Empty, Ancho = "120px", SinEmbudo = true },
+        new() { Titulo = "Divisa", Valor = x => x.Divisa ?? string.Empty, Ancho = "80px" },
+        new() { Titulo = "Activo", Valor = x => x.Activo ? "Sí" : "No", Ancho = "80px",
+                Plantilla = d => @<MudChip T="string" Size="Size.Small" Color="@(d.Activo ? Color.Success : Color.Default)">@(d.Activo ? "Sí" : "No")</MudChip> },
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Sesion.EnsureLoadedAsync();
+        if (!Sesion.EsAdministrador) { _loading = false; return; }
+        await CargarAsync();
+    }
+
+    private async Task CargarAsync()
+    {
+        _loading = true;
+        try { _items = (await Mantenimiento.DameDepartamentosAsync()).ToList(); }
+        catch (Exception ex) { Snackbar.Add($"Error al cargar: {ex.Message}", Severity.Error); }
+        finally { _loading = false; }
+    }
+
+    private async Task EditarAsync(DepartamentoVista? d)
+    {
+        if (!Sesion.EsAdministrador) return;
+        var parametros = new DialogParameters<DepartamentoDialog> { { x => x.Original, d } };
+        var dlg = await DialogService.ShowAsync<DepartamentoDialog>(d is null ? "Nuevo departamento" : "Editar departamento", parametros,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true });
+        var res = await dlg.Result;
+        if (res is { Canceled: false }) await CargarAsync();
+    }
+}

@@ -19,7 +19,7 @@
                OnClick="ExportarExcelAsync" Disabled="@(!Items.Any())">Exportar a Excel</MudButton>
 </div>
 
-<MudDataGrid @ref="_dg" @key="_key" T="T" Items="Items" Loading="Loading" QuickFilter="_quick" Class="gt-grid"
+<MudDataGrid @ref="_dg" @key="_key" T="T" Items="Items" Loading="Loading" QuickFilter="_quick" Class="@GridClass" RowClick="OnRowClickInternal"
              Filterable="true" FilterMode="DataGridFilterMode.ColumnFilterRow"
              FilterCaseSensitivity="DataGridFilterCaseSensitivity.CaseInsensitive"
              FixedHeader="true" Height="@Alto" SortMode="SortMode.Multiple" Hover="true" Dense="true" Striped="true" RowsPerPage="RowsPerPage">
@@ -50,7 +50,7 @@
         @if (Acciones is not null)
         {
             <TemplateColumn T="T" Title="" Sortable="false" Filterable="false" StickyRight="true" HeaderStyle="width:90px;min-width:90px">
-                <CellTemplate>@Acciones(context.Item)</CellTemplate>
+                <CellTemplate><div @onclick:stopPropagation="true">@Acciones(context.Item)</div></CellTemplate>
             </TemplateColumn>
         }
     </Columns>
@@ -69,6 +69,8 @@
     [Parameter] public string TextoVacio { get; set; } = "No hay registros.";
     [Parameter] public string TextoSinResultados { get; set; } = "No hay resultados para los filtros aplicados.";
     [Parameter] public RenderFragment<T>? Acciones { get; set; }
+    /// <summary>Si se define, al pulsar una fila se invoca con el elemento (las acciones de la última columna no la disparan).</summary>
+    [Parameter] public EventCallback<T> OnFilaClick { get; set; }
     [Parameter] public RenderFragment? ToolbarIzquierda { get; set; }
     /// <summary>Controles a la derecha del espaciador, antes de "Limpiar filtros" (p. ej. recuento y Refrescar).</summary>
     [Parameter] public RenderFragment? ToolbarCentro { get; set; }
@@ -77,6 +79,12 @@
     [Parameter] public string NombreExport { get; set; } = "Datos";
 
     private MudDataGrid<T>? _dg;
+    private string GridClass => OnFilaClick.HasDelegate ? "gt-grid gt-grid-clicable" : "gt-grid";
+
+    private async Task OnRowClickInternal(DataGridRowClickEventArgs<T> args)
+    {
+        if (OnFilaClick.HasDelegate && args.Item is not null) await OnFilaClick.InvokeAsync(args.Item);
+    }
     private string _busqueda = string.Empty;
     private int _key;
     private readonly Dictionary<string, string> _fTexto = new();

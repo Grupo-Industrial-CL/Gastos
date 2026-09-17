@@ -10,4 +10,7 @@ public interface IGastoService
     /// El filtrado por sociedades es la barrera de seguridad de los Consultores: la UI SIEMPRE pasa sus sociedades permitidas.
     /// </summary>
     Task<IReadOnlyList<GastoVista>> DameGastosAsync(IReadOnlyCollection<int>? sociedades, DateTime? desde, DateTime? hasta, CancellationToken ct = default);
+
+    /// <summary>Detalle de un gasto (registro completo, movimiento de tarjeta y carga). Nulo si no existe o no está entre las sociedades permitidas.</summary>
+    Task<GastoDetalle?> DameDetalleAsync(long contador, IReadOnlyCollection<int>? sociedades, CancellationToken ct = default);
 }
