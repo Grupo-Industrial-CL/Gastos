@@ -133,6 +133,10 @@ else
     }).AllowAnonymous();
 }
 
+// La pantalla principal es Gastos: la raíz redirige por HTTP (evita la NavigationException del prerrenderizado
+// que se produce al redirigir desde un componente durante el render estático).
+app.MapGet("/", () => Results.Redirect("/gastos"));
+
 app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 
 app.Run();
