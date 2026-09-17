@@ -1,0 +1,212 @@
+@typeparam T
+@inject IJSRuntime JS
+
+@* Grid reutilizable (planteamiento del MpGrid de MasterPlan v2):
+   - Buscador general con lupa que resalta en amarillo las coincidencias en todas las columnas.
+   - Cuadro de filtro bajo cada columna ("contiene" o comparación numérica) + embudo con los valores existentes.
+   - Ordenación, paginación y exportación a Excel de lo que se ve (filtrado y ordenado). *@
+
+<div class="d-flex align-center flex-wrap mb-2" style="gap:.5rem">
+    <MudTextField T="string" Value="_busqueda" ValueChanged="OnBusqueda" Placeholder="@PlaceholderBusqueda"
+                  Immediate="true" DebounceInterval="150" Adornment="Adornment.Start" Clearable="true"
+                  AdornmentIcon="@Icons.Material.Filled.Search" Class="mt-0" Style="max-width:380px" />
+    @ToolbarIzquierda
+    <MudSpacer />
+    <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.FilterAltOff" OnClick="LimpiarFiltros">Limpiar filtros</MudButton>
+    @ToolbarDerecha
+    <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Success" StartIcon="@Icons.Material.Filled.FileDownload"
+               OnClick="ExportarExcelAsync" Disabled="@(!Items.Any())">Exportar a Excel</MudButton>
+</div>
+
+<MudDataGrid @ref="_dg" @key="_key" T="T" Items="Items" Loading="Loading" QuickFilter="_quick" Class="gt-grid"
+             Filterable="true" FilterMode="DataGridFilterMode.ColumnFilterRow"
+             FilterCaseSensitivity="DataGridFilterCaseSensitivity.CaseInsensitive"
+             FixedHeader="true" Height="@Alto" SortMode="SortMode.Multiple" Hover="true" Dense="true" Striped="true" RowsPerPage="RowsPerPage">
+    <Columns>
+        @foreach (var col in Columnas)
+        {
+            var c = col;
+            <TemplateColumn T="T" Title="@c.Titulo" Sortable="true" Filterable="c.Filtrable"
+                            SortBy="@(new Func<T, object>(x => c.Orden is not null ? c.Orden(x) : c.Valor(x)))"
+                            HeaderStyle="@(string.IsNullOrEmpty(c.Ancho) ? null : $"width:{c.Ancho};min-width:{c.Ancho}")">
+                <CellTemplate>
+                    @if (c.Plantilla is not null)
+                    {
+                        @c.Plantilla(context.Item)
+                    }
+                    else if (c.Derecha)
+                    {
+                        <span class="gt-num"><MudHighlighter Text="@c.Valor(context.Item)" HighlightedText="@_busqueda" /></span>
+                    }
+                    else
+                    {
+                        <MudHighlighter Text="@c.Valor(context.Item)" HighlightedText="@_busqueda" />
+                    }
+                </CellTemplate>
+                <FilterTemplate>@FiltroColumna(c)</FilterTemplate>
+            </TemplateColumn>
+        }
+        @if (Acciones is not null)
+        {
+            <TemplateColumn T="T" Title="" Sortable="false" Filterable="false" StickyRight="true" HeaderStyle="width:90px;min-width:90px">
+                <CellTemplate>@Acciones(context.Item)</CellTemplate>
+            </TemplateColumn>
+        }
+    </Columns>
+    <NoRecordsContent><MudText Class="pa-4">@(Items.Any() ? TextoSinResultados : TextoVacio)</MudText></NoRecordsContent>
+    <PagerContent>
+        <MudDataGridPager T="T" PageSizeOptions="@(new[] { 20, 50, 100, 500 })" RowsPerPageString="Filas por página:" InfoFormat="{first_item}-{last_item} de {all_items}" />
+    </PagerContent>
+</MudDataGrid>
+
+@code {
+    [Parameter] public IEnumerable<T> Items { get; set; } = Array.Empty<T>();
+    [Parameter] public List<GtColumna<T>> Columnas { get; set; } = new();
+    [Parameter] public bool Loading { get; set; }
+    [Parameter] public int RowsPerPage { get; set; } = 50;
+    [Parameter] public string PlaceholderBusqueda { get; set; } = "Buscar en todas las columnas...";
+    [Parameter] public string TextoVacio { get; set; } = "No hay registros.";
+    [Parameter] public string TextoSinResultados { get; set; } = "No hay resultados para los filtros aplicados.";
+    [Parameter] public RenderFragment<T>? Acciones { get; set; }
+    [Parameter] public RenderFragment? ToolbarIzquierda { get; set; }
+    [Parameter] public RenderFragment? ToolbarDerecha { get; set; }
+    [Parameter] public string Alto { get; set; } = "calc(100vh - 330px)";
+    [Parameter] public string NombreExport { get; set; } = "Datos";
+
+    private MudDataGrid<T>? _dg;
+    private string _busqueda = string.Empty;
+    private int _key;
+    private readonly Dictionary<string, string> _fTexto = new();
+    private readonly Dictionary<string, HashSet<string>> _fSel = new();
+
+    /// <summary>Filas visibles tras aplicar buscador y filtros (para contadores y exportación).</summary>
+    public IEnumerable<T> Filtradas => Items.Where(_quick);
+
+    private void OnBusqueda(string v) { _busqueda = v ?? string.Empty; }
+
+    private Func<T, bool> _quick => x =>
+    {
+        if (!string.IsNullOrWhiteSpace(_busqueda))
+        {
+            var t = _busqueda.Trim();
+            if (!Columnas.Any(c => (c.Valor(x) ?? string.Empty).Contains(t, StringComparison.OrdinalIgnoreCase))) return false;
+        }
+        foreach (var kv in _fTexto)
+        {
+            if (string.IsNullOrEmpty(kv.Value)) continue;
+            var col = Columnas.FirstOrDefault(c => c.Titulo == kv.Key);
+            if (col is null) continue;
+            if (col.FiltroNumerico)
+            {
+                if (!CoincideNumerico(col.Numero?.Invoke(x), kv.Value)) return false;
+            }
+            else if ((col.Valor(x) ?? string.Empty).IndexOf(kv.Value, StringComparison.OrdinalIgnoreCase) < 0) return false;
+        }
+        foreach (var kv in _fSel)
+        {
+            if (kv.Value.Count == 0) continue;
+            var col = Columnas.FirstOrDefault(c => c.Titulo == kv.Key);
+            if (col is null) continue;
+            if (!kv.Value.Contains(col.Valor(x) ?? string.Empty)) return false;
+        }
+        return true;
+    };
+
+    private string ValorMostrado(string k)
+    {
+        if (_fTexto.TryGetValue(k, out var t) && !string.IsNullOrEmpty(t)) return t;
+        if (_fSel.TryGetValue(k, out var s) && s.Count > 0) return string.Join(", ", s.OrderBy(x => x, StringComparer.CurrentCultureIgnoreCase));
+        return string.Empty;
+    }
+    private void CambiaTexto(string k, string v)
+    {
+        if (string.IsNullOrEmpty(v)) _fTexto.Remove(k);
+        else { _fTexto[k] = v; _fSel.Remove(k); }
+    }
+    private bool HayFiltro(string k) => (_fTexto.TryGetValue(k, out var t) && !string.IsNullOrEmpty(t)) || (_fSel.TryGetValue(k, out var s) && s.Count > 0);
+    private bool TieneSeleccion(string k) => _fSel.TryGetValue(k, out var s) && s.Count > 0;
+    private bool Sel(string k, string v) => _fSel.TryGetValue(k, out var s) && s.Contains(v);
+    private void Toggle(string k, string v)
+    {
+        if (!_fSel.TryGetValue(k, out var s)) { s = new(); _fSel[k] = s; }
+        if (!s.Add(v)) s.Remove(v);
+        if (s.Count == 0) _fSel.Remove(k);
+        _fTexto.Remove(k);
+    }
+    private void LimpiarColumna(string k) { _fTexto.Remove(k); _fSel.Remove(k); }
+
+    private IEnumerable<string> ValoresDistintos(GtColumna<T> c)
+        => Items.Select(p => c.Valor(p) ?? string.Empty).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().OrderBy(s => s).Take(500);
+
+    // Filtro numérico: ">100", "<50", ">=10", "<=5", "=0" o un número (igualdad). Expresión incompleta = no filtra.
+    private static bool CoincideNumerico(double? valor, string expr)
+    {
+        if (string.IsNullOrWhiteSpace(expr)) return true;
+        expr = expr.Trim();
+        var op = "=";
+        if (expr.StartsWith(">=")) { op = ">="; expr = expr[2..]; }
+        else if (expr.StartsWith("<=")) { op = "<="; expr = expr[2..]; }
+        else if (expr.StartsWith(">")) { op = ">"; expr = expr[1..]; }
+        else if (expr.StartsWith("<")) { op = "<"; expr = expr[1..]; }
+        else if (expr.StartsWith("=")) { op = "="; expr = expr[1..]; }
+        var limpio = new string(expr.Where(ch => char.IsDigit(ch) || ch == '.' || ch == ',' || ch == '-').ToArray()).Replace(".", string.Empty).Replace(",", ".");
+        if (!double.TryParse(limpio, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var objetivo)) return true;
+        if (valor is null) return false;
+        var v = valor.Value;
+        return op switch { ">" => v > objetivo, "<" => v < objetivo, ">=" => v >= objetivo, "<=" => v <= objetivo, _ => Math.Abs(v - objetivo) < 0.0001 };
+    }
+
+    private void LimpiarFiltros()
+    {
+        _busqueda = string.Empty;
+        _fTexto.Clear();
+        _fSel.Clear();
+        _key++;   // reconstruye el grid para vaciar los cuadros de filtro
+    }
+
+    // Exporta lo que el usuario está viendo (filtrado y ordenado), sin la columna de acciones.
+    private async Task ExportarExcelAsync()
+    {
+        IEnumerable<T> filas;
+        try { filas = _dg?.FilteredItems ?? Filtradas; } catch { filas = Filtradas; }
+        var lista = filas.ToList();
+        var headers = Columnas.Select(c => c.Titulo);
+        var rows = lista.Select(x => Columnas.Select(c =>
+        {
+            var n = c.Numero?.Invoke(x);
+            return n.HasValue ? ExcelCell.Num(n.Value) : ExcelCell.Txt(c.Valor(x) ?? string.Empty);
+        }));
+        var bytes = ExcelExport.Crear(headers, rows, NombreExport);
+        await JS.InvokeVoidAsync("gtDownload", $"{NombreExport}_{DateTime.Now:yyyyMMdd_HHmm}.xlsx", Convert.ToBase64String(bytes),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    }
+
+    private RenderFragment FiltroColumna(GtColumna<T> c) => @<div class="d-flex align-center flex-nowrap" style="gap:0"
+        title="@(c.FiltroNumerico ? "Filtra por número: >, <, =, >=, <= (p. ej. >100)" : null)">
+        <MudTextField T="string" @key="@(TieneSeleccion(c.Titulo) ? $"fsel-{c.Titulo}-{ValorMostrado(c.Titulo)}" : $"ftxt-{c.Titulo}")"
+                      Value="@ValorMostrado(c.Titulo)" ValueChanged="@(v => CambiaTexto(c.Titulo, v))"
+                      ReadOnly="@TieneSeleccion(c.Titulo)" Immediate="true" DebounceInterval="200" Margin="Margin.Dense" Variant="Variant.Text"
+                      Placeholder="@(c.FiltroNumerico ? "> < =" : "Filtrar...")" Class="mt-0" Style="min-width:0;width:100%" />
+        @if (!c.SinEmbudo)
+        {
+            <MudMenu Icon="@Icons.Material.Filled.FilterList" Dense="true" IconColor="@(HayFiltro(c.Titulo) ? Color.Info : Color.Default)"
+                     AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+                <div class="pa-2" style="max-height:320px;overflow:auto;min-width:220px">
+                    <div class="d-flex justify-space-between align-center mb-1">
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Valores</MudText>
+                        <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => LimpiarColumna(c.Titulo))">Limpiar</MudButton>
+                    </div>
+                    @foreach (var v in ValoresDistintos(c))
+                    {
+                        <MudMenuItem AutoClose="false" OnClick="@(() => Toggle(c.Titulo, v))">
+                            <div class="d-flex align-center" style="white-space:nowrap;gap:6px">
+                                <MudCheckBox T="bool" Dense="true" Size="Size.Small" ReadOnly="true" Value="@Sel(c.Titulo, v)" Style="pointer-events:none" />
+                                <span>@v</span>
+                            </div>
+                        </MudMenuItem>
+                    }
+                </div>
+            </MudMenu>
+        }
+    </div>;
+}

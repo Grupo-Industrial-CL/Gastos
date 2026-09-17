@@ -1,0 +1,14 @@
+@using Microsoft.AspNetCore.Http
+@inject NavigationManager Navigation
+@code {
+    // En render estático (SSR) se redirige por HTTP (302); en render interactivo, con recarga completa.
+    [CascadingParameter] private HttpContext? HttpContext { get; set; }
+
+    protected override void OnInitialized()
+    {
+        var returnUrl = Uri.EscapeDataString(Navigation.ToBaseRelativePath(Navigation.Uri));
+        var url = $"MicrosoftIdentity/Account/SignIn?returnUrl=/{returnUrl}";
+        if (HttpContext is not null) HttpContext.Response.Redirect(url);
+        else Navigation.NavigateTo(url, forceLoad: true);
+    }
+}

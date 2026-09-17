@@ -1,0 +1,115 @@
+@page "/config/usuarios"
+@attribute [Authorize]
+@inject IUsuarioService UsuarioService
+@inject IPermisosService PermisosService
+@inject SesionUsuario Sesion
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+@* Configuración (solo Administrador): rol de cada usuario de Azure en el portal y sociedades a las que accede.
+   El directorio (MP_Usuarios) es de solo lectura; aquí solo se asignan rol y sociedades. *@
+
+<PageTitle>Usuarios y permisos</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true"><h1 style="all:inherit;margin:0">Usuarios y permisos</h1></MudText>
+<MudText Typo="Typo.body2" Class="mb-4 mud-text-secondary">
+    Directorio sincronizado desde Azure AD (solo lectura). Asigna el <b>rol</b> (Administrador ve todo y carga datos; Consultor solo consulta)
+    y, para los Consultores, las <b>sociedades</b> a las que tienen acceso. Sin rol no se puede entrar en el portal.
+</MudText>
+
+@if (!Sesion.EsAdministrador)
+{
+    <MudAlert Severity="Severity.Warning">Solo los Administradores pueden configurar usuarios.</MudAlert>
+}
+else
+{
+    <GtGrid T="MPUsuario" Items="Visibles" Columnas="_cols" Loading="_loading" NombreExport="Usuarios" RowsPerPage="20"
+            PlaceholderBusqueda="Buscar usuario (nombre, correo, empresa)..."
+            TextoVacio="No hay usuarios. Comprueba que la tabla MP_Usuarios está cargada.">
+        <ToolbarIzquierda>
+            <MudSwitch T="bool" @bind-Value="_soloConAcceso" Color="Color.Primary" Label="Solo con acceso" Class="ml-2" />
+            <MudSwitch T="bool" @bind-Value="_mostrarBajas" Color="Color.Default" Label="Mostrar bajas" />
+        </ToolbarIzquierda>
+        <Acciones Context="u">
+            @if (u.Rol is not null)
+            {
+                <MudTooltip Text="@(EsAdmin(u) ? "Un Administrador ve todas las sociedades" : "Sociedades con acceso")">
+                    <MudIconButton Icon="@Icons.Material.Filled.Business" Size="Size.Small" Color="Color.Primary" Disabled="@EsAdmin(u)"
+                                   OnClick="@(() => EditarSociedadesAsync(u))" />
+                </MudTooltip>
+            }
+        </Acciones>
+    </GtGrid>
+}
+
+@code {
+    private List<MPUsuario> _usuarios = new();
+    private bool _loading = true;
+    private bool _soloConAcceso;
+    private bool _mostrarBajas;
+    private List<GtColumna<MPUsuario>> _cols = new();
+
+    private IEnumerable<MPUsuario> Visibles => _usuarios.Where(u => (_mostrarBajas || u.usIsActive) && (!_soloConAcceso || u.Rol is not null));
+    private static bool EsAdmin(MPUsuario u) => string.Equals(u.Rol, Roles.Administrador, StringComparison.OrdinalIgnoreCase);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _cols = new()
+        {
+            new() { Titulo = "Nombre", Valor = x => x.usDisplayName, Ancho = "220px", SinEmbudo = true },
+            new() { Titulo = "Correo", Valor = x => x.usId, Ancho = "220px", SinEmbudo = true },
+            new() { Titulo = "Empresa", Valor = x => x.usCompanyName ?? string.Empty, Ancho = "200px" },
+            new() { Titulo = "Departamento", Valor = x => x.usDepartment ?? string.Empty, Ancho = "170px" },
+            new() { Titulo = "Puesto", Valor = x => x.usJobTitle ?? string.Empty, Ancho = "180px", SinEmbudo = true },
+            new() { Titulo = "Rol", Valor = x => x.Rol ?? "Sin acceso", Ancho = "170px",
+                    Plantilla = u => @<MudSelect T="string" Value="@(u.Rol ?? string.Empty)" ValueChanged="@(v => AsignarRolAsync(u, v))" Dense="true" Margin="Margin.Dense" Style="min-width:150px">
+                        <MudSelectItem T="string" Value="@string.Empty">— Sin acceso —</MudSelectItem>
+                        <MudSelectItem T="string" Value="@Roles.Administrador">Administrador</MudSelectItem>
+                        <MudSelectItem T="string" Value="@Roles.Consultor">Consultor</MudSelectItem>
+                    </MudSelect> },
+            new() { Titulo = "Sociedades", Valor = x => x.Rol is null ? string.Empty : EsAdmin(x) ? "Todas" : x.NumSociedades.ToString(), Ancho = "100px", SinEmbudo = true },
+            new() { Titulo = "Activo", Valor = x => x.usIsActive ? "Sí" : "No", Ancho = "80px",
+                    Plantilla = u => @<MudChip T="string" Size="Size.Small" Color="@(u.usIsActive ? Color.Success : Color.Default)">@(u.usIsActive ? "Sí" : "No")</MudChip> },
+        };
+        await Sesion.EnsureLoadedAsync();
+        if (!Sesion.EsAdministrador) { _loading = false; return; }
+        await CargarAsync();
+    }
+
+    private async Task CargarAsync()
+    {
+        _loading = true;
+        try { _usuarios = (await UsuarioService.DameUsuariosAsync()).ToList(); }
+        catch (Exception ex) { Snackbar.Add($"Error al cargar usuarios: {ex.Message}", Severity.Error); }
+        finally { _loading = false; }
+    }
+
+    private async Task AsignarRolAsync(MPUsuario u, string rol)
+    {
+        if (!Sesion.EsAdministrador) return;
+        var nuevo = string.IsNullOrEmpty(rol) ? null : rol;
+        if (string.Equals(u.usId, Sesion.Email, StringComparison.OrdinalIgnoreCase) && !string.Equals(nuevo, Roles.Administrador, StringComparison.OrdinalIgnoreCase))
+        {
+            Snackbar.Add("No puedes quitarte a ti mismo el rol de Administrador.", Severity.Warning);
+            return;
+        }
+        try
+        {
+            await PermisosService.AsignarRolAsync(u.usId, nuevo, Sesion.Email);
+            u.Rol = nuevo;
+            if (nuevo is null) u.NumSociedades = 0;
+            Snackbar.Add(nuevo is null ? $"Acceso retirado a {u.usDisplayName}." : $"Rol {nuevo} asignado a {u.usDisplayName}.", Severity.Success);
+            if (nuevo == Roles.Consultor && u.NumSociedades == 0) await EditarSociedadesAsync(u);
+        }
+        catch (Exception ex) { Snackbar.Add($"Error al asignar el rol: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task EditarSociedadesAsync(MPUsuario u)
+    {
+        var parametros = new DialogParameters<SociedadesUsuarioDialog> { { d => d.Usuario, u } };
+        var dlg = await DialogService.ShowAsync<SociedadesUsuarioDialog>($"Sociedades de {u.usDisplayName}", parametros,
+            new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseOnEscapeKey = true });
+        await dlg.Result;
+        try { u.NumSociedades = (await PermisosService.DamePermisosAsync(u.usId)).Sociedades.Count; } catch { }
+    }
+}

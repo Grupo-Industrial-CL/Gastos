@@ -1,0 +1,121 @@
+@page "/gastos"
+@attribute [Authorize]
+@inject IGastoService GastoService
+@inject ICatalogoService Catalogos
+@inject SesionUsuario Sesion
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+@* Pantalla principal: grid de gastos internos con buscador general (resaltado en amarillo), filtro bajo cada
+   columna y exportación a Excel de lo que se ve. El Administrador ve todas las sociedades y dispone del botón
+   "Cargar datos"; el Consultor solo ve las sociedades a las que tiene acceso (el filtro se aplica en la consulta). *@
+
+<PageTitle>Gastos</PageTitle>
+
+<div class="d-flex align-center flex-wrap mb-3" style="gap:.75rem">
+    <MudText Typo="Typo.h4" Class="mr-2"><h1 style="all:inherit;margin:0">Gastos</h1></MudText>
+    <MudSpacer />
+    <MudDateRangePicker @bind-DateRange="_rango" Label="Fecha del gasto" Margin="Margin.Dense" Variant="Variant.Outlined"
+                        PickerVariant="PickerVariant.Dialog" DateFormat="dd/MM/yyyy" Clearable="true" Style="max-width:260px" />
+    <MudSelect T="int" MultiSelection="true" @bind-SelectedValues="_sociedadesSel" Label="Sociedades" Margin="Margin.Dense" Variant="Variant.Outlined"
+               Dense="true" Style="min-width:260px;max-width:420px" MultiSelectionTextFunc="@TextoSociedades" SelectAll="true" SelectAllText="Todas">
+        @foreach (var s in _sociedades)
+        {
+            <MudSelectItem T="int" Value="@s.CodPais">@s.Nombre</MudSelectItem>
+        }
+    </MudSelect>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="CargarAsync" Disabled="_loading">Consultar</MudButton>
+</div>
+
+<GtGrid T="GastoVista" @ref="_grid" Items="_gastos" Columnas="_cols" Loading="_loading" NombreExport="Gastos"
+        PlaceholderBusqueda="Buscar (empleado, concepto, factura...)"
+        TextoVacio="@(_consultado ? "No hay gastos para el periodo y las sociedades seleccionadas." : "Selecciona el periodo y pulsa Consultar.")">
+    <ToolbarIzquierda>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary ml-2">@_gastos.Count gasto(s) · @TotalImporte</MudText>
+    </ToolbarIzquierda>
+    <ToolbarDerecha>
+        @if (Sesion.EsAdministrador)
+        {
+            <MudButton Variant="Variant.Filled" Size="Size.Small" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.CloudDownload" OnClick="AbrirCargaAsync">Cargar datos</MudButton>
+        }
+    </ToolbarDerecha>
+</GtGrid>
+
+@code {
+    private GtGrid<GastoVista>? _grid;
+    private List<GastoVista> _gastos = new();
+    private List<Sociedad> _sociedades = new();
+    private IEnumerable<int> _sociedadesSel = Array.Empty<int>();
+    private DateRange _rango = new(new DateTime(DateTime.Today.Year, 1, 1), DateTime.Today);
+    private bool _loading;
+    private bool _consultado;
+    private List<GtColumna<GastoVista>> _cols = new();
+
+    private string TotalImporte => _gastos.Count == 0 ? string.Empty : $"total {_gastos.Sum(g => g.Importe):N2} €";
+    private string TextoSociedades(List<string> sel) => sel.Count == _sociedades.Count ? "Todas" : $"{sel.Count} seleccionada(s)";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _cols = new()
+        {
+            new() { Titulo = "Sociedad", Valor = x => x.Sociedad, Ancho = "170px" },
+            new() { Titulo = "Departamento", Valor = x => x.DepartamentoNombre.Length > 0 ? x.DepartamentoNombre : x.Departamento.ToString(), Ancho = "170px" },
+            new() { Titulo = "Empleado", Valor = x => x.Empleado.Length > 0 ? x.Empleado : x.Codigo.ToString(), Ancho = "200px" },
+            new() { Titulo = "Fecha", Valor = x => x.Fecha.ToString("dd/MM/yyyy"), Orden = x => x.Fecha, Ancho = "110px", SinEmbudo = true },
+            new() { Titulo = "Tipo de gasto", Valor = x => x.TipoGastoNombre, Ancho = "140px" },
+            new() { Titulo = "Concepto / lugar", Valor = x => x.Donde, Ancho = "260px", SinEmbudo = true },
+            new() { Titulo = "Importe", Valor = x => x.Importe.ToString("N2"), Orden = x => x.Importe, Numero = x => (double)x.Importe, FiltroNumerico = true, SinEmbudo = true, Derecha = true, Ancho = "110px" },
+            new() { Titulo = "Moneda", Valor = x => x.Moneda, Ancho = "80px" },
+            new() { Titulo = "Factura", Valor = x => x.Factura ?? string.Empty, Ancho = "130px", SinEmbudo = true },
+            new() { Titulo = "Origen", Valor = x => x.Origen ?? string.Empty, Ancho = "100px",
+                    Plantilla = item => @<MudChip T="string" Size="Size.Small" Color="@ColorOrigen(item.Origen)">@(item.Origen ?? "-")</MudChip> },
+            new() { Titulo = "Validado", Valor = x => x.Validado == "S" ? "Sí" : "No", Ancho = "90px" },
+            new() { Titulo = "Pagado", Valor = x => x.Pagado == "S" ? "Sí" : "No", Ancho = "90px" },
+            new() { Titulo = "SAP", Valor = x => x.ContaSAP == "S" ? "Sí" : "No", Ancho = "80px" },
+            new() { Titulo = "Fecha carga", Valor = x => x.FechaInsert?.ToString("dd/MM/yyyy HH:mm") ?? string.Empty, Orden = x => x.FechaInsert ?? DateTime.MinValue, Ancho = "140px", SinEmbudo = true },
+        };
+
+        await Sesion.EnsureLoadedAsync();
+        try
+        {
+            var todas = await Catalogos.DameSociedadesAsync();
+            // El Consultor solo puede elegir entre sus sociedades permitidas.
+            _sociedades = Sesion.SociedadesVisibles is null ? todas.ToList() : todas.Where(s => Sesion.SociedadesVisibles.Contains(s.CodPais)).ToList();
+            _sociedadesSel = _sociedades.Select(s => s.CodPais).ToList();
+        }
+        catch (Exception ex) { Snackbar.Add($"Error al cargar las sociedades: {ex.Message}", Severity.Error); }
+        await CargarAsync();
+    }
+
+    private static Color ColorOrigen(string? o) => o switch
+    {
+        "Repsol" => Color.Warning,
+        "Moeve" => Color.Info,
+        "LayTours" => Color.Tertiary,
+        _ => Color.Default
+    };
+
+    private async Task CargarAsync()
+    {
+        _loading = true;
+        try
+        {
+            // Barrera de seguridad: la intersección entre lo seleccionado y lo permitido. Un Consultor nunca consulta fuera de sus sociedades.
+            var permitidas = _sociedades.Select(s => s.CodPais).ToHashSet();
+            var sel = _sociedadesSel.Where(permitidas.Contains).ToList();
+            _gastos = (await GastoService.DameGastosAsync(sel, _rango?.Start, _rango?.End)).ToList();
+            _consultado = true;
+        }
+        catch (Exception ex) { Snackbar.Add($"Error al consultar los gastos: {ex.Message}", Severity.Error); }
+        finally { _loading = false; }
+    }
+
+    private async Task AbrirCargaAsync()
+    {
+        if (!Sesion.EsAdministrador) return;
+        var dlg = await DialogService.ShowAsync<CargarDatosDialog>("Cargar datos",
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true });
+        var res = await dlg.Result;
+        if (res is { Canceled: false }) await CargarAsync();
+    }
+}

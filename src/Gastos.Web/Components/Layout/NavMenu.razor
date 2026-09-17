@@ -1,0 +1,13 @@
+@* Menú lateral. Gastos lo ven todos los usuarios con acceso; Configuración solo los Administradores. *@
+@inject SesionUsuario Sesion
+
+<MudNavMenu>
+    <MudNavLink Href="gastos" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.TableView">Gastos</MudNavLink>
+    @if (Sesion.EsAdministrador)
+    {
+        <MudNavLink Href="cargas" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.History">Historial de cargas</MudNavLink>
+        <MudNavGroup Title="Configuración" Icon="@Icons.Material.Filled.Settings" Expanded="true">
+            <MudNavLink Href="config/usuarios" Icon="@Icons.Material.Filled.ManageAccounts">Usuarios y permisos</MudNavLink>
+        </MudNavGroup>
+    }
+</MudNavMenu>

@@ -1,0 +1,8 @@
+@page "/"
+@attribute [Authorize]
+@inject NavigationManager Nav
+
+@* La pantalla principal es Gastos. *@
+@code {
+    protected override void OnInitialized() => Nav.NavigateTo("gastos", replace: true);
+}

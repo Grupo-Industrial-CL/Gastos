@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Gastos.Domain</RootNamespace>
+    <AssemblyName>Gastos.Domain</AssemblyName>
+  </PropertyGroup>
+
+  <!--
+    Capa de dominio: entidades (tablas GT_*), modelos (DTOs), enumeraciones y contratos
+    (interfaces de servicios y de acceso a datos). No depende de ninguna otra capa ni de
+    infraestructura concreta (EF Core, ASP.NET, HttpClient...).
+  -->
+
+</Project>

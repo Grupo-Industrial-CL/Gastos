@@ -1,0 +1,83 @@
+@inject IPermisosService PermisosService
+@inject ICatalogoService Catalogos
+@inject ISnackbar Snackbar
+
+@* Sociedades a las que tiene acceso un Consultor. Cada cambio se guarda al instante. *@
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-2 mud-text-secondary">
+            <b>@Usuario.usDisplayName</b> (@Usuario.usId) solo verá los gastos de las sociedades marcadas.
+        </MudText>
+        <div class="d-flex align-center flex-wrap mb-2" style="gap:.5rem">
+            <MudTextField T="string" @bind-Value="_filtro" Placeholder="Filtrar sociedades..." Immediate="true" Margin="Margin.Dense"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Class="mt-0" Style="max-width:280px" />
+            <MudSpacer />
+            <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.DoneAll" OnClick="@(() => TodasAsync(true))">Todas</MudButton>
+            <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.RemoveDone" OnClick="@(() => TodasAsync(false))">Ninguna</MudButton>
+        </div>
+        @if (_loading)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+        }
+        else
+        {
+            <div style="max-height:55vh;overflow:auto">
+                <MudGrid Spacing="0">
+                    @foreach (var s in _sociedades.Where(s => string.IsNullOrWhiteSpace(_filtro) || s.Nombre.Contains(_filtro, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        <MudItem xs="12" sm="6" md="4">
+                            <MudCheckBox T="bool" Label="@s.Nombre" Color="Color.Primary" Dense="true"
+                                         Value="@_acceso.Contains(s.CodPais)" ValueChanged="@(v => ToggleAsync(s.CodPais, v))" />
+                        </MudItem>
+                    }
+                </MudGrid>
+            </div>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2 d-block">@_acceso.Count de @_sociedades.Count sociedades seleccionadas.</MudText>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => Dialog.Close(DialogResult.Ok(true)))">Cerrar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private MudDialogInstance Dialog { get; set; } = default!;
+    [Parameter] public MPUsuario Usuario { get; set; } = new();
+
+    private List<Sociedad> _sociedades = new();
+    private HashSet<int> _acceso = new();
+    private string _filtro = string.Empty;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _sociedades = (await Catalogos.DameSociedadesAsync()).ToList();
+            _acceso = (await PermisosService.DamePermisosAsync(Usuario.usId)).Sociedades.ToHashSet();
+        }
+        catch (Exception ex) { Snackbar.Add($"Error al cargar: {ex.Message}", Severity.Error); }
+        finally { _loading = false; }
+    }
+
+    private async Task ToggleAsync(int codPais, bool asignada)
+    {
+        try
+        {
+            await PermisosService.EstablecerSociedadAsync(Usuario.usId, codPais, asignada);
+            if (asignada) _acceso.Add(codPais); else _acceso.Remove(codPais);
+        }
+        catch (Exception ex) { Snackbar.Add($"Error al guardar: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task TodasAsync(bool asignar)
+    {
+        try
+        {
+            await PermisosService.EstablecerTodasSociedadesAsync(Usuario.usId, asignar);
+            _acceso = asignar ? _sociedades.Select(s => s.CodPais).ToHashSet() : new HashSet<int>();
+        }
+        catch (Exception ex) { Snackbar.Add($"Error al guardar: {ex.Message}", Severity.Error); }
+    }
+}

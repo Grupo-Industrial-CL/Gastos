@@ -1,0 +1,45 @@
+/* Estilos propios del portal de Gastos. MudBlazor aporta el grueso del theming. */
+html, body {
+    margin: 0;
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.mud-nav-group .mud-nav-link { font-size: 0.9rem; }
+
+/* Grid (GtGrid): no ensancha la página; el scroll horizontal es interno y la paginación queda fija. */
+.gt-grid { max-width: 100%; }
+.gt-grid .mud-table-cell { padding-left: 6px; padding-right: 6px; }
+.gt-grid .mud-table-container {
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+}
+.gt-grid .mud-table-container::-webkit-scrollbar { height: 12px; }
+.gt-grid .mud-table-container::-webkit-scrollbar-thumb { background: rgba(0,0,0,.35); border-radius: 6px; }
+.gt-grid .mud-table-pagination { display: flex; justify-content: flex-end; }
+
+/* Cabecera fija con dos filas (títulos + filtros): la de filtros se fija justo debajo de la de títulos. */
+.gt-grid thead tr:first-child > .mud-table-cell {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background-color: var(--mud-palette-background-grey, var(--mud-palette-surface));
+}
+.gt-grid thead tr:nth-child(2) > .mud-table-cell {
+    position: sticky !important;
+    top: 41px !important;
+    z-index: 2;
+    background-color: var(--mud-palette-surface);
+}
+
+/* Resaltado de coincidencias del buscador (MudHighlighter) en amarillo. */
+.gt-grid mark, .gt-grid .mud-highlighter {
+    background-color: #fff176;
+    color: inherit;
+    padding: 0 1px;
+    border-radius: 2px;
+}
+
+/* Importes alineados a la derecha. */
+.gt-num { text-align: right; display: block; width: 100%; }

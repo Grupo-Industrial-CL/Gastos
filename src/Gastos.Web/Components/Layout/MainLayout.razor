@@ -1,0 +1,158 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject SesionUsuario Sesion
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@using Microsoft.AspNetCore.Components.Routing
+
+<MudThemeProvider @ref="_themeProvider" Theme="_theme" @bind-IsDarkMode="_isDarkMode" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar Elevation="1">
+        @if (Sesion.TieneAcceso)
+        {
+            <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@(() => _drawerOpen = !_drawerOpen)" />
+        }
+        <MudIcon Icon="@Icons.Material.Filled.Receipt" Class="ml-1 mr-2" />
+        <MudText Typo="Typo.h6">Gastos de viaje</MudText>
+        <MudSpacer />
+        <MudTooltip Text="@(_isDarkMode ? "Modo claro" : "Modo oscuro")">
+            <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
+                           Color="Color.Inherit" OnClick="@(() => _isDarkMode = !_isDarkMode)" Class="mr-4" />
+        </MudTooltip>
+        <AuthorizeView>
+            <Authorized>
+                <MudText Typo="Typo.body2" Class="mr-2 d-none d-sm-flex">
+                    @(string.IsNullOrWhiteSpace(Sesion.Nombre) ? context.User.Identity?.Name : Sesion.Nombre)
+                </MudText>
+                @if (Sesion.TieneAcceso)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="@(Sesion.EsAdministrador ? Color.Secondary : Color.Primary)" Class="mr-2 d-none d-sm-flex">@Sesion.Rol</MudChip>
+                }
+                <MudMenu Icon="@Icons.Material.Filled.AccountCircle" Color="Color.Inherit">
+                    <MudMenuItem Disabled="true">@context.User.Identity?.Name</MudMenuItem>
+                    <MudDivider />
+                    <MudMenuItem OnClick="CerrarSesion" Icon="@Icons.Material.Filled.Logout">Cerrar sesión</MudMenuItem>
+                </MudMenu>
+            </Authorized>
+        </AuthorizeView>
+    </MudAppBar>
+
+    @if (_cargado && Sesion.TieneAcceso)
+    {
+        <MudDrawer @bind-Open="_drawerOpen" Elevation="2" ClipMode="DrawerClipMode.Always">
+            <NavMenu />
+        </MudDrawer>
+    }
+
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="my-4">
+            @if (!_cargado)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+            }
+            else if (!Sesion.TieneAcceso)
+            {
+                @* Gate de acceso: autenticado en Azure pero SIN rol en GT_UsuariosRoles. No puede usar la aplicación. *@
+                <MudPaper Elevation="2" Class="pa-8 mx-auto mt-8" Style="max-width:640px;text-align:center">
+                    <MudIcon Icon="@Icons.Material.Filled.LockPerson" Color="Color.Warning" Style="font-size:3.5rem" />
+                    <MudText Typo="Typo.h5" Class="mt-3 mb-2">Acceso no autorizado</MudText>
+                    <MudText Typo="Typo.body1" Class="mb-2">
+                        Tu usuario <b>@Sesion.Email</b> se ha identificado correctamente, pero no tiene un <b>rol asignado</b>
+                        en el portal de Gastos de viaje.
+                    </MudText>
+                    <MudText Typo="Typo.body2" Class="mb-6 mud-text-secondary">
+                        Ponte en contacto con un administrador del portal para que te asigne el rol
+                        <b>Administrador</b> o <b>Consultor</b> y, cuando lo tengas, vuelve a iniciar sesión.
+                    </MudText>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Logout" OnClick="CerrarSesion">Cerrar sesión</MudButton>
+                </MudPaper>
+            }
+            else
+            {
+                <ErrorBoundary @ref="_errorBoundary">
+                    <ChildContent>@Body</ChildContent>
+                    <ErrorContent Context="ex">
+                        <MudAlert Severity="Severity.Error" Class="my-4">Se ha producido un error inesperado: @ex.Message</MudAlert>
+                    </ErrorContent>
+                </ErrorBoundary>
+            }
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    private bool _drawerOpen = true;
+    private bool _isDarkMode;
+    private bool _cargado;
+    private MudThemeProvider _themeProvider = default!;
+    private ErrorBoundary? _errorBoundary;
+
+    // Tema corporativo alineado con MasterPlan v2 (barra azul marino), con primario en verde azulado para distinguir el portal.
+    private readonly MudTheme _theme = new()
+    {
+        PaletteLight = new PaletteLight
+        {
+            Primary = "#00695C",
+            Secondary = "#1565C0",
+            AppbarBackground = "#152238",
+            AppbarText = "#FFFFFF",
+            Background = "#F5F6F8",
+            DrawerBackground = "#FFFFFF",
+            DrawerText = "#2B2B2B",
+            Success = "#2E7D32",
+            Warning = "#F9A825",
+            Error = "#D32F2F",
+            Info = "#0288D1",
+        },
+        PaletteDark = new PaletteDark
+        {
+            Primary = "#4DB6AC",
+            Secondary = "#4F9BEC",
+            AppbarBackground = "#0F1826",
+            Background = "#121826",
+            Surface = "#1A2333",
+            DrawerBackground = "#0F1826",
+        },
+        LayoutProperties = new LayoutProperties { DefaultBorderRadius = "8px", DrawerWidthLeft = "250px" }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        Nav.LocationChanged += OnLocationChanged;
+        await Sesion.EnsureLoadedAsync();
+        _cargado = true;
+        GuardarAcceso();
+    }
+
+    // Control por RUTA además del menú: un Consultor no puede entrar en /config/* escribiendo la URL.
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e) => GuardarAcceso();
+
+    private void GuardarAcceso()
+    {
+        if (!_cargado || !Sesion.TieneAcceso) return;
+        var rel = Nav.ToBaseRelativePath(Nav.Uri);
+        var corte = rel.IndexOfAny(new[] { '?', '#' });
+        if (corte >= 0) rel = rel[..corte];
+        rel = rel.Trim('/').ToLowerInvariant();
+        if (rel.StartsWith("config") && !Sesion.EsAdministrador)
+        {
+            Snackbar.Add("No tienes acceso a esa pantalla.", Severity.Warning);
+            Nav.NavigateTo("gastos", replace: true);
+        }
+    }
+
+    private void CerrarSesion() => Nav.NavigateTo("account/logout", forceLoad: true);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try { _isDarkMode = await _themeProvider.GetSystemPreference(); StateHasChanged(); } catch { }
+    }
+
+    protected override void OnParametersSet() => _errorBoundary?.Recover();
+    public void Dispose() => Nav.LocationChanged -= OnLocationChanged;
+}

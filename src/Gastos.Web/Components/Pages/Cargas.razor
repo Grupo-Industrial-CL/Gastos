@@ -1,0 +1,47 @@
+@page "/cargas"
+@attribute [Authorize]
+@inject ICargaService CargaService
+@inject SesionUsuario Sesion
+@inject ISnackbar Snackbar
+
+<PageTitle>Historial de cargas</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true"><h1 style="all:inherit;margin:0">Historial de cargas</h1></MudText>
+<MudText Typo="Typo.body2" Class="mb-4 mud-text-secondary">Registro de todas las cargas ejecutadas (LayTours, Repsol y Moeve), correctas y fallidas.</MudText>
+
+@if (!Sesion.EsAdministrador)
+{
+    <MudAlert Severity="Severity.Warning">Solo los Administradores pueden ver el historial de cargas.</MudAlert>
+}
+else
+{
+    <GtGrid T="Carga" Items="_cargas" Columnas="_cols" Loading="_loading" NombreExport="Cargas" RowsPerPage="20" TextoVacio="Todavía no se ha ejecutado ninguna carga." />
+}
+
+@code {
+    private List<Carga> _cargas = new();
+    private bool _loading = true;
+    private readonly List<GtColumna<Carga>> _cols = new()
+    {
+        new() { Titulo = "Nº", Valor = x => x.Id.ToString(), Orden = x => x.Id, Numero = x => x.Id, Ancho = "70px", SinEmbudo = true },
+        new() { Titulo = "Fecha", Valor = x => x.Fecha.ToString("dd/MM/yyyy HH:mm"), Orden = x => x.Fecha, Ancho = "140px", SinEmbudo = true },
+        new() { Titulo = "Origen", Valor = x => x.Origen, Ancho = "100px" },
+        new() { Titulo = "Usuario", Valor = x => x.Usuario, Ancho = "200px" },
+        new() { Titulo = "Periodo / fichero", Valor = x => x.NombreFichero ?? (x.Desde is null ? string.Empty : $"{x.Desde:dd/MM/yyyy} - {x.Hasta:dd/MM/yyyy}"), Ancho = "200px", SinEmbudo = true },
+        new() { Titulo = "Filas", Valor = x => x.Filas.ToString(), Numero = x => x.Filas, Derecha = true, Ancho = "80px", SinEmbudo = true },
+        new() { Titulo = "Insertados", Valor = x => x.Insertados.ToString(), Numero = x => x.Insertados, Derecha = true, Ancho = "100px", SinEmbudo = true },
+        new() { Titulo = "Omitidos", Valor = x => x.Omitidos.ToString(), Numero = x => x.Omitidos, Derecha = true, Ancho = "90px", SinEmbudo = true },
+        new() { Titulo = "Estado", Valor = x => x.Estado, Ancho = "90px",
+                Plantilla = item => @<MudChip T="string" Size="Size.Small" Color="@(item.Estado == "OK" ? Color.Success : item.Estado == "Error" ? Color.Error : Color.Default)">@item.Estado</MudChip> },
+        new() { Titulo = "Mensaje", Valor = x => x.Mensaje ?? string.Empty, SinEmbudo = true },
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Sesion.EnsureLoadedAsync();
+        if (!Sesion.EsAdministrador) { _loading = false; return; }
+        try { _cargas = (await CargaService.DameCargasAsync()).ToList(); }
+        catch (Exception ex) { Snackbar.Add($"Error al cargar el historial: {ex.Message}", Severity.Error); }
+        finally { _loading = false; }
+    }
+}

@@ -1,0 +1,48 @@
+## .NET / Visual Studio
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.userprefs
+project.lock.json
+artifacts/
+TestResults/
+
+## Rider / VS Code
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+## Publish
+publish/
+*.pubxml
+*.pubxml.user
+PublishScripts/
+
+## NuGet
+*.nupkg
+*.snupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+.nuget/
+
+## User-specific / secrets
+appsettings.*.local.json
+secrets.json
+*.env
+
+## Logs
+[Ll]og/
+*.log
+!legacy/**/*.log
+
+## OS
+.DS_Store
+Thumbs.db

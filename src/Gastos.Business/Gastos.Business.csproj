@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Gastos.Business</RootNamespace>
+    <AssemblyName>Gastos.Business</AssemblyName>
+  </PropertyGroup>
+
+  <!--
+    Capa de lógica de negocio: servicios, cargas (parser LayTours, clasificador de movimientos de
+    tarjeta de carburante) y clientes de las APIs de Repsol/Moeve. Reutilizable por la web y por
+    cualquier otro host (jobs, MCP...). No depende de ASP.NET ni de la UI.
+  -->
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.2" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.2" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Gastos.Domain\Gastos.Domain.csproj" />
+    <ProjectReference Include="..\Gastos.Data\Gastos.Data.csproj" />
+  </ItemGroup>
+
+</Project>
