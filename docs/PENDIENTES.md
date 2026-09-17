@@ -2,6 +2,9 @@
 
 ## 🔴 Bloquean el uso real
 
+> Mientras no llegue el punto 1, en desarrollo se entra con la **autenticación simulada** (`/dev-login`, ver README).
+> Quitar `Autenticacion:Simulada` de `appsettings.Development.json` cuando el registro de Azure esté disponible.
+
 1. **Registro de aplicación en Entra ID** (Infra, ticket solicitado). Hace falta `TenantId`, `ClientId` y `ClientSecret`.
    URIs de redirección y de cierre de sesión pedidas:
 

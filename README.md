@@ -39,20 +39,30 @@ legacy/vb6/          Código fuente original en Visual Basic 6 (solo referencia)
 
 1. Crear las tablas: ejecutar `db/01_creacion_GT.sql` en `MasterPlan_DES` y dar de alta al primer Administrador
    (bloque comentado al final del script).
-2. Configurar los secretos (no se commitean):
+2. Configurar la cadena de conexión (no se commitea):
    ```bash
    cd src/Gastos.Web
    dotnet user-secrets set "ConnectionStrings:Gastos" "Server=CLAPP107v.clay.local\DESARROLLO,1444;Database=MasterPlan_DES;User Id=bd_masterplan_o;Password=****;TrustServerCertificate=True"
-   dotnet user-secrets set "AzureAd:TenantId" "<tenant>"
-   dotnet user-secrets set "AzureAd:ClientId" "<client id>"
-   dotnet user-secrets set "AzureAd:ClientSecret" "<secreto>"
    ```
-   (TenantId y ClientId pueden ir también en `appsettings.json`; el secreto y la contraseña nunca.)
 3. Ejecutar:
    ```bash
    dotnet run --project src/Gastos.Web
    ```
    y abrir `https://localhost:7444`.
+
+### Autenticación en desarrollo (mientras no exista el registro de Azure)
+
+`appsettings.Development.json` trae `Autenticacion:Simulada = true`: en lugar de Azure se abre la página local
+`/dev-login`, donde eliges el correo (`usId` de `MP_Usuarios`) con el que entrar, sin contraseña. A partir de ahí todo
+es idéntico al modo real: el rol y las sociedades se leen de `GT_UsuariosRoles` / `GT_UsuariosSociedades`, y un correo
+sin rol ve la pantalla de "acceso no autorizado". El modo simulado **solo se admite con `ASPNETCORE_ENVIRONMENT=Development`**;
+en cualquier otro entorno la aplicación no arranca.
+
+Para probar el login real de Azure cuando infra entregue el registro: poner `Simulada` a `false` y configurar
+```bash
+dotnet user-secrets set "AzureAd:ClientSecret" "<secreto>"
+```
+(TenantId y ClientId van en `appsettings.json`, sección `AzureAd`; el secreto y la contraseña de BD nunca se commitean.)
 
 Tests: `dotnet test`.
 

@@ -3,6 +3,7 @@
 @inject SesionUsuario Sesion
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
+@inject OpcionesAutenticacion Autenticacion
 @using Microsoft.AspNetCore.Components.Routing
 
 <MudThemeProvider @ref="_themeProvider" Theme="_theme" @bind-IsDarkMode="_isDarkMode" />
@@ -50,6 +51,12 @@
 
     <MudMainContent>
         <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="my-4">
+            @if (Autenticacion.Simulada)
+            {
+                <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3" Icon="@Icons.Material.Filled.DeveloperMode">
+                    <b>Autenticación simulada (solo desarrollo):</b> has entrado como <b>@Sesion.Email</b> sin pasar por Azure. En test y producción se usa la cuenta corporativa de Microsoft.
+                </MudAlert>
+            }
             @if (!_cargado)
             {
                 <MudProgressLinear Indeterminate="true" Color="Color.Primary" />

@@ -20,36 +20,58 @@ CultureInfo.DefaultThreadCurrentCulture = culturaEs;
 CultureInfo.DefaultThreadCurrentUICulture = culturaEs;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Autenticación: Azure AD / Entra ID (Microsoft.Identity.Web + OpenID Connect). Sección "AzureAd".
-// El login lo da Azure; el ACCESO lo decide GT_UsuariosRoles (ver SesionUsuario y MainLayout).
+// Autenticación.
+//  - Normal: Azure AD / Entra ID (Microsoft.Identity.Web + OpenID Connect). Sección "AzureAd".
+//  - SIMULADA (solo Development, Autenticacion:Simulada=true): página local /dev-login que emite la misma cookie
+//    con los mismos claims, para poder avanzar mientras no exista el registro de aplicación en Azure.
+// En ambos casos el ACCESO lo decide GT_UsuariosRoles (ver SesionUsuario y MainLayout).
 // ─────────────────────────────────────────────────────────────────────────────
-builder.Services.AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
-    .AddMicrosoftIdentityWebApp(builder.Configuration.GetSection("AzureAd"));
+var autenticacionSimulada = builder.Configuration.GetValue<bool>("Autenticacion:Simulada");
+if (autenticacionSimulada && !builder.Environment.IsDevelopment())
+    throw new InvalidOperationException("Autenticacion:Simulada solo se admite en el entorno Development. Quita el flag o corrige ASPNETCORE_ENVIRONMENT.");
+builder.Services.AddSingleton(new OpcionesAutenticacion(autenticacionSimulada));
 
-// Sesión con caducidad deslizante de 1 hora por inactividad (mismo criterio que MasterPlan v2).
-builder.Services.Configure<CookieAuthenticationOptions>(CookieAuthenticationDefaults.AuthenticationScheme, o =>
+if (autenticacionSimulada)
 {
-    o.ExpireTimeSpan = TimeSpan.FromHours(1);
-    o.SlidingExpiration = true;
-});
-builder.Services.Configure<OpenIdConnectOptions>(OpenIdConnectDefaults.AuthenticationScheme, o =>
+    builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+        .AddCookie(o =>
+        {
+            o.LoginPath = AutenticacionSimulada.RutaLogin;
+            o.ExpireTimeSpan = TimeSpan.FromHours(8);
+            o.SlidingExpiration = true;
+        });
+}
+else
 {
-    o.SignedOutRedirectUri = "/";
-    // Permite forzar el selector de cuenta al cerrar sesión (ver endpoint /account/logout).
-    var anterior = o.Events.OnRedirectToIdentityProvider;
-    o.Events.OnRedirectToIdentityProvider = async ctx =>
+    builder.Services.AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
+        .AddMicrosoftIdentityWebApp(builder.Configuration.GetSection("AzureAd"));
+
+    // Sesión con caducidad deslizante de 1 hora por inactividad (mismo criterio que MasterPlan v2).
+    builder.Services.Configure<CookieAuthenticationOptions>(CookieAuthenticationDefaults.AuthenticationScheme, o =>
     {
-        if (anterior is not null) await anterior(ctx);
-        if (ctx.Properties.Items.TryGetValue("prompt", out var prompt) && !string.IsNullOrEmpty(prompt))
-            ctx.ProtocolMessage.Prompt = prompt;
-    };
-});
+        o.ExpireTimeSpan = TimeSpan.FromHours(1);
+        o.SlidingExpiration = true;
+    });
+    builder.Services.Configure<OpenIdConnectOptions>(OpenIdConnectDefaults.AuthenticationScheme, o =>
+    {
+        o.SignedOutRedirectUri = "/";
+        // Permite forzar el selector de cuenta al cerrar sesión (ver endpoint /account/logout).
+        var anterior = o.Events.OnRedirectToIdentityProvider;
+        o.Events.OnRedirectToIdentityProvider = async ctx =>
+        {
+            if (anterior is not null) await anterior(ctx);
+            if (ctx.Properties.Items.TryGetValue("prompt", out var prompt) && !string.IsNullOrEmpty(prompt))
+                ctx.ProtocolMessage.Prompt = prompt;
+        };
+    });
+}
 
 // Toda la aplicación exige usuario autenticado (no hay páginas públicas).
 builder.Services.AddAuthorization(o => o.FallbackPolicy = o.DefaultPolicy);
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<AuthenticationStateProvider, ServerAuthenticationStateProvider>();
-builder.Services.AddControllersWithViews().AddMicrosoftIdentityUI();
+var mvc = builder.Services.AddControllersWithViews();
+if (!autenticacionSimulada) mvc.AddMicrosoftIdentityUI();
 
 // UI: Blazor Server + MudBlazor
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
@@ -92,12 +114,24 @@ app.MapControllers();
 
 // Cierre de sesión: limpia la cookie y vuelve al login con el selector de cuenta. Debe ser una petición
 // HTTP real (no el circuito Blazor), por eso el layout navega aquí con forceLoad.
-app.MapGet("/account/logout", async (HttpContext http) =>
+if (autenticacionSimulada)
 {
-    await http.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-    await http.ChallengeAsync(OpenIdConnectDefaults.AuthenticationScheme,
-        new AuthenticationProperties(new Dictionary<string, string?> { ["prompt"] = "select_account" }) { RedirectUri = "/" });
-}).AllowAnonymous();
+    AutenticacionSimulada.MapearEndpoints(app);
+    app.MapGet("/account/logout", async (HttpContext http) =>
+    {
+        await http.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+        return Results.Redirect(AutenticacionSimulada.RutaLogin);
+    }).AllowAnonymous();
+}
+else
+{
+    app.MapGet("/account/logout", async (HttpContext http) =>
+    {
+        await http.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+        await http.ChallengeAsync(OpenIdConnectDefaults.AuthenticationScheme,
+            new AuthenticationProperties(new Dictionary<string, string?> { ["prompt"] = "select_account" }) { RedirectUri = "/" });
+    }).AllowAnonymous();
+}
 
 app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 
