@@ -2,10 +2,17 @@
 
 ## 🔴 Bloquean el uso real
 
-1. **Registro de aplicación en Entra ID** (Infra). Hace falta `TenantId`, `ClientId` y `ClientSecret`, y registrar las
-   URIs de redirección `https://<host>/signin-oidc`, `https://localhost:7444/signin-oidc` y el logout
-   `https://<host>/signout-callback-oidc`. TenantId/ClientId van en `appsettings.json` (sección `AzureAd`); el secreto
-   en user-secrets (`AzureAd:ClientSecret`) o variable de entorno `AzureAd__ClientSecret`.
+1. **Registro de aplicación en Entra ID** (Infra, ticket solicitado). Hace falta `TenantId`, `ClientId` y `ClientSecret`.
+   URIs de redirección y de cierre de sesión pedidas:
+
+   | Entorno | Redirección | Cierre de sesión |
+   |---|---|---|
+   | Desarrollo | `https://localhost:7444/signin-oidc` | `https://localhost:7444/signout-callback-oidc` |
+   | Test | `https://gastos-des.clgrupoindustrial.com/signin-oidc` | `https://gastos-des.clgrupoindustrial.com/signout-callback-oidc` |
+   | Producción | `https://gastos.clgrupoindustrial.com/signin-oidc` | `https://gastos.clgrupoindustrial.com/signout-callback-oidc` |
+
+   TenantId/ClientId van en `appsettings.json` (sección `AzureAd`); el secreto en user-secrets (`AzureAd:ClientSecret`)
+   o variable de entorno `AzureAd__ClientSecret`.
 2. **Cadena de conexión** con contraseña: `ConnectionStrings:Gastos` en user-secrets / `ConnectionStrings__Gastos`.
    Recomendado rotar la contraseña de `bd_masterplan_o`, que ha circulado por chat.
 3. **Crear las tablas** con `db/01_creacion_GT.sql` y dar de alta al **primer Administrador** (bloque final del script).
