@@ -36,7 +36,7 @@ src/
   Gastos.Web/        Blazor Server + MudBlazor + Azure AD
 tests/Gastos.Tests/  Tests xUnit de la lógica portada del VB6
 db/                  Scripts SQL: creación de tablas GT_ y migración desde Informix
-docs/                ARQUITECTURA.md · PENDIENTES.md · DESPLIEGUE.md
+docs/                ARQUITECTURA.md · PENDIENTES.md · DESPLIEGUE.md · PLAN_PRUEBAS.md
 legacy/vb6/          Código fuente original en Visual Basic 6 (solo referencia)
 ```
 
@@ -71,4 +71,4 @@ dotnet user-secrets set "AzureAd:ClientSecret" "<secreto>"
 
 Tests: `dotnet test`.
 
-Ver `docs/PENDIENTES.md` para lo que falta por cerrar (registro de aplicación en Azure, APIs de Repsol/Moeve, migración del histórico).
+Ver `docs/PLAN_PRUEBAS.md` para las pruebas a ejecutar con datos reales y `docs/PENDIENTES.md` para lo que falta por cerrar (registro de aplicación en Azure, APIs de Repsol/Moeve, migración del histórico).
